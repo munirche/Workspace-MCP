@@ -5,8 +5,8 @@ connector it lets Claude on the phone read allowlisted repos on the box, save
 and find notes in the vault, and leave handoff notes for the next Claude Code
 session.
 
-Status: scaffold only, nothing runs yet. The design is in
-`claude-config/MCP_Server_Plan.md` and moves to `Docs/workspace_mcp/Plan.md`.
+Status: designed and specified, nothing runs yet. See
+`Docs/workspace_mcp/` for the spec, the plan and the tasks.
 
 ## Develop
 

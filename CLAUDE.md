@@ -7,13 +7,14 @@ handoff notes for the next Claude Code session. One user, Munir.
 
 ## Current Status
 
-**As of 2026-11-11.** Phase A (the repo) scaffolded: structure, conventions,
-the `mcp-expert` agent, SDD documents as stubs, the traceability test and CI.
-No feature code exists; every file under `Code/workspace_mcp/` is a stub.
-**Next:** Phase B, the Spec, Plan and Tasks, then Munir's approval of the
-`Tasks.md` status line.
-**Design:** `claude-config/MCP_Server_Plan.md` (decisions D-1 to D-12, phases
-A to G) until Phase B moves it into `Docs/workspace_mcp/Plan.md`.
+**As of 2026-11-11.** Phase A (the repo) is scaffolded and Phase B has written
+the spec (94 criteria), the plan and the task list, reviewed by `mcp-expert`
+and `security-expert`. All three are drafts. No feature code exists; every
+file under `Code/workspace_mcp/` is a stub.
+**Next:** Munir answers the spec's three open questions and edits the status
+line in `Tasks.md`; then Phase 1, the skeleton run locally.
+**Design:** `Docs/workspace_mcp/Plan.md` (decisions D-1 to D-12, the box's
+hardening rules line by line, build phases 1 to 5).
 
 ## Structure
 

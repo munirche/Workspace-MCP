@@ -4,6 +4,10 @@ on:
   push:
     branches: [master]
   pull_request:
+  schedule:
+    # Weekly, so an advisory published against a pinned dependency is seen
+    # even when nobody pushes.
+    - cron: '17 6 * * 1'
 
 jobs:
   test:

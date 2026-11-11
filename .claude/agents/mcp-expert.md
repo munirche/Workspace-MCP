@@ -39,8 +39,7 @@ a security consequence, state the requirement and leave the judgement to it.
 
 1. `CLAUDE.md` — the constitution every task inherits.
 2. `Docs/workspace_mcp/Spec.md`, `Plan.md`, `Tasks.md` — what is to be built
-   and what was decided, with reasons. Until Phase B moves it, the design is in
-   `~/GitRepos/claude-config/MCP_Server_Plan.md`.
+   and what was decided, with reasons.
 3. `requirements.lock` — the pinned `mcp` SDK version. Judge against that
    version's behaviour, not against the newest release or your memory of one.
 4. Your memory, for rulings already made.

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(//etc/*.env)",
+      "Read(//etc/*.env.*)",
+      "Read(//etc/workspace-mcp/**)",
+      "Read(//proc/**/environ)",
+      "Bash(cat /etc/*.env*)",
+      "Bash(systemctl cat *)",
+      "Bash(systemctl show *)",
+      "Bash(sudo *)",
+      "Bash(* /proc/*/environ*)"
+    ]
+  }
+}
