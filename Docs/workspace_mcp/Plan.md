@@ -3,10 +3,11 @@
 ## Current State
 
 **As of 2026-11-11.** Nothing is built. The repo is scaffolded (Phase A, commit
-`0d6decf`) and Phase B has written the spec, this plan and the task list as
-drafts, reviewed by `mcp-expert` and `security-expert`.
-**Next:** Munir reads the three documents and edits the status line in
-`Tasks.md`; then Phase 1, the skeleton run locally.
+`0d6decf`) and Phase B wrote the spec (94 criteria, none open), this plan and the task list,
+reviewed by `mcp-expert` and `security-expert`. Munir approved phases 1–2 in
+`Tasks.md` on 2026-11-11; phases 3–5 are draft.
+**Next:** Phase 1, the skeleton run locally, starting at `T1.1` with
+`/build mcp security task T1.1` in a session opened in this repo.
 **Watch:** sessions on the box cannot `sudo`, so every deploy step is Munir's,
 from `deploy/DEPLOY.md`. Claude never sees a real secret: the local trial uses
 throwaway values. Anthropic's address ranges and the connector's sign-in rules
@@ -905,7 +906,11 @@ characters per result, and GitHub's free plan, which has no branch protection.
 ## Open Questions
 
 - **Telegram alert bot.** A new bot from BotFather, used only for these
-  alerts (D-4, I-9): its name, and the chat it writes to. The token goes into
+  alerts (D-4, I-9). Decided 2026-11-11: named `MRC_MCP_Bot`, or
+  `MRC_MCP_1_Bot` if BotFather refuses the handle (hyphens are not allowed
+  in a handle, and it must end in `bot`); it writes to Munir's private chat
+  with it. Not created yet: Munir creates it at the start of Phase 2 and the
+  handle granted is recorded here. The token goes into
   the env file and a Bitwarden note by your hand; names only here. Before
   Phase 2.
 - **SDK findings so far** (`mcp-expert`, 2026-11-11, from the source of

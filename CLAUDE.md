@@ -9,10 +9,12 @@ handoff notes for the next Claude Code session. One user, Munir.
 
 **As of 2026-11-11.** Phase A (the repo) is scaffolded and Phase B has written
 the spec (94 criteria), the plan and the task list, reviewed by `mcp-expert`
-and `security-expert`. All three are drafts. No feature code exists; every
+and `security-expert`. Munir approved phases 1–2 in `Tasks.md`; phases 3–5
+are draft and the spec has no open question. No feature code exists; every
 file under `Code/workspace_mcp/` is a stub.
-**Next:** Munir answers the spec's three open questions and edits the status
-line in `Tasks.md`; then Phase 1, the skeleton run locally.
+**Next:** Phase 1, the skeleton run locally: `/build mcp security task T1.1`,
+in a session opened in this repo. Phase 2 starts with Munir's own steps (DNS,
+the alert bot `MRC_MCP_Bot`, the secrets), listed in `Tasks.md`.
 **Design:** `Docs/workspace_mcp/Plan.md` (decisions D-1 to D-12, the box's
 hardening rules line by line, build phases 1 to 5).
 

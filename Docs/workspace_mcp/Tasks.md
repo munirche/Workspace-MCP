@@ -1,6 +1,6 @@
 # Tasks: Workspace MCP
 
-Status: draft, not approved
+Status: tasks approved by Munir 2026-11-11 (phases 1–2); phases 3–5 draft
 
 <!-- Only Munir edits the status line. Format:
      Status: tasks approved by Munir <YYYY-MM-DD> (phases 1–2); phases 3–5 draft
@@ -54,7 +54,7 @@ is ticked.
 
 Manual checklist:
 - [ ] One change at a time: no other change to this box's SSH, firewall or web front is made in the same sitting
-- [ ] R-10.9 Before anything: the alert bot exists; the passphrase is in Bitwarden only; its hash, the bot token and the client secret are in Bitwarden and will be typed into the env file by Munir; none is a value used on ovh-vps. Each deploy key is generated in place as root and only its fingerprint is noted
+- [ ] R-10.9 Before anything: the alert bot `MRC_MCP_Bot` exists (D-4; `MRC_MCP_1_Bot` if the handle is taken), writing to Munir's private chat; the passphrase is in Bitwarden only; its hash, the bot token and the client secret are in Bitwarden and will be typed into the env file by Munir; none is a value used on ovh-vps. Each deploy key is generated in place as root and only its fingerprint is noted
 - [ ] The install script is copied to a root-owned path, read there by Munir, and that copy is the one run
 - [ ] R-10.7, R-10.6 The deploy installs a commit that is on the remote's `master`, installs dependencies only as ready-built files matching the lock's hashes, shows the difference of every file root will run or load, and waits for yes
 - [ ] R-10.4 `/opt/workspace-mcp/`, the unit, `/etc/workspace-mcp.env` and `/etc/workspace-mcp/` are root-owned; the env file and keys are mode 600; the unit holds no secret value, and its five `Environment=` names are added to the recorded list of non-secrets

@@ -1,6 +1,6 @@
 # Spec: Workspace MCP
 
-Status: draft, not approved
+Status: in force for phases 1–2, approved with `Tasks.md` by Munir 2026-11-11; later phases draft
 Created: 2026-11-11
 Plan: `Docs/workspace_mcp/Plan.md` · Tasks: `Docs/workspace_mcp/Tasks.md`
 
@@ -206,9 +206,9 @@ this server, so no health-data safeguard applies.
 
 ## Needs clarification
 
-- [NEEDS CLARIFICATION: the alert bot's name and the chat it writes to.] — raised 2026-11-11, blocks R-8.5 (Phase 2; Phase 1 does not depend on it)
+None open.
 
-Resolved 2026-11-11 by Munir: a note edited from the phone gains the first line even if the service did not create it, and the line names who ordered it and from which application, so other applications can be added later (R-4.6). `inbox/` and `handoff/<repo>.md` stand for now; they are configuration and can change as the vault is tuned.
+Resolved 2026-11-11 by Munir: a note edited from the phone gains the first line even if the service did not create it, and the line names who ordered it and from which application, so other applications can be added later (R-4.6). `inbox/` and `handoff/<repo>.md` stand for now; they are configuration and can change as the vault is tuned. The alert bot is a new Telegram bot named `MRC_MCP_Bot` (`MRC_MCP_1_Bot` if the handle is taken), used for nothing else, writing to Munir's private chat with it (R-8.5, R-10.9); the handle BotFather actually grants is recorded in `Plan.md` when the bot is created in Phase 2.
 
 ## Completeness checklist
 
@@ -216,5 +216,5 @@ Resolved 2026-11-11 by Munir: a note edited from the phone gains the first line 
 - [x] Every criterion is one observable behaviour with no implementation detail
 - [x] Every criterion could be stated as a test sentence
 - [x] Manual-only criteria are marked [MANUAL]
-- [ ] No [NEEDS CLARIFICATION] remains for the phases about to be approved
+- [x] No [NEEDS CLARIFICATION] remains for the phases about to be approved
 - [x] Domain expert has reviewed the sections in its domain (`mcp-expert` and `security-expert`, 2026-11-11; findings folded in)
