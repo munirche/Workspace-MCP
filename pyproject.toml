@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "workspace-mcp"
+version = "0.0.0"
+description = "Remote MCP server on openclaw-vps for the Claude app"
+requires-python = ">=3.14"
+
+[tool.setuptools.packages.find]
+where = ["Code"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["Code"]
