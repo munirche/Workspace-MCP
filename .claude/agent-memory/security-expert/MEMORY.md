@@ -1,0 +1,2 @@
+- [Supply-chain decisions](project_supply_chain_decisions.md) — T1.1: dev tools unhashed (accepted), 14-day cutoff, only-binary line in the lock
+- [Open carries from T1.1](project_open_carries_t1_1.md) — properties T1.2, T1.6, T1.9, T2.1, T2.2 must prove (logs, socket mode, root and the venv)

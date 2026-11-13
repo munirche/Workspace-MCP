@@ -2,18 +2,24 @@
 
 ## Current State
 
-**As of 2026-11-11.** Nothing is built. The repo is scaffolded (Phase A, commit
-`0d6decf`) and Phase B wrote the spec (94 criteria, none open), this plan and the task list,
-reviewed by `mcp-expert` and `security-expert`. Munir approved phases 1–2 in
-`Tasks.md` on 2026-11-11; phases 3–5 are draft.
-**Next:** Phase 1, the skeleton run locally, starting at `T1.1` with
-`/build mcp security task T1.1` in a session opened in this repo.
+**As of 2026-11-12.** Phase 1 is under way. T1.1 pinned `mcp` 2.3.0 and its 27
+dependencies by hash in `requirements.lock` (ready-built files only, none
+younger than 14 days) and tried the SDK on this box; the answers are in "The
+SDK, as Tried". No feature code exists yet. Munir approved phases 1–2 in
+`Tasks.md`, re-dated 2026-11-12 when T1.1 grew to cover the lock's install;
+phases 3–5 are draft.
+**Next:** T1.2, then T1.3, each with `/build mcp security task <id>`.
 **Watch:** sessions on the box cannot `sudo`, so every deploy step is Munir's,
 from `deploy/DEPLOY.md`. Claude never sees a real secret: the local trial uses
 throwaway values. Anthropic's address ranges and the connector's sign-in rules
-change; recheck the references at each deploy. Unverified until built: the
-pinned SDK's behaviour, the sandbox options on this box, voice with a custom
-connector, and whether the app can be told to always allow a write.
+change; recheck the references at each deploy. The SDK checks the Host only on
+`/mcp`, refuses any `Origin` header it was not told to allow, and hides a plain exception's
+message, so T1.10 adds its own checks; and a token with no `resource` is
+refused, so T1.6 puts the service's own address on it when Claude sends none.
+Unverified until built: what Claude's
+client sends (secret method, `resource`, protocol revision, `Origin`), the
+sandbox options on this box, voice with a custom connector, and whether the
+app can be told to always allow a write.
 
 _Quick-orientation summary. Full plan below._
 
@@ -104,7 +110,7 @@ live, AI-Data-Expert's `Docs/Infrastructure/` (D-11).
 
 House default, Python
 3.14 is installed (Ubuntu 26.04.1), and the SDK's app class (`FastMCP` in the 1.x line, renamed `MCPServer`
-in 2.x; T1.1 pins one) has Streamable
+in 2.x; T1.1 pinned `mcp` 2.3.0) has Streamable
 HTTP and the OAuth authorization-server routes (metadata, authorize, token)
 with a provider interface we implement. The revocation route stays off:
 nothing needs it, and cancelling tokens is an administrator command on the box. The server runs Streamable
@@ -113,8 +119,12 @@ breaks Claude's connection and nginx holds no long-lived streams.
 Dependencies are pinned in a lock file and audited for advisories in CI
 (I-15); an SDK upgrade is a deliberate bump, test run and deploy. The lock
 is made by `pip-compile --generate-hashes` (pip-tools, pinned in
-`requirements-dev.txt`) and its header carries the command, so a bump is
-that command run again. The google-genai 3.0 and SQLAlchemy 2.1 breakages of 2026-11-06/07 are what an
+`requirements-dev.txt`) from `requirements.in`, not from `pyproject.toml`,
+which would make pip-compile run setuptools to build the project's metadata.
+It takes ready-built files only, and an upload cutoff set 14 days before the
+day of pinning (`--uploaded-prior-to`, pip 26 or later), so no release
+younger than two weeks is pinned. The lock's header carries the command; a
+bump moves the cutoff and runs it again. The google-genai 3.0 and SQLAlchemy 2.1 breakages of 2026-11-06/07 are what an
 unpinned dependency does. TypeScript rejected: it adds Node tooling to a box
 that already runs two Node installs.
 
@@ -689,11 +699,115 @@ Seen 2026-11-10:
   a `checkout` source is meant to show.
 - Neither `claude-config` nor `AI-Data-Expert-V1-repo` holds a `.env*` file.
 
+## The SDK, as Tried
+
+T1.1, 2026-11-12, `mcp` 2.3.0 (the newest release, 2026-10-02). The app class
+is `MCPServer` in `mcp.server.mcpserver`; `mcp.server.fastmcp` only raises an
+error in 2.x.
+
+**The lock.** `mcp` and 27 dependencies, each a ready-built wheel for Python
+3.14, none uploaded after the 2026-10-29 cutoff. New with 2.x: `mcp-types`,
+`httpx2` and `httpcore2` (pydantic's successor to httpx), and
+`opentelemetry-api` (the API only, which sends nothing). The lock carries
+`--only-binary :all:` itself. A new venv installs it with `--require-hashes
+--only-binary :all: --no-cache-dir`, `pip check` is clean, the test tools
+installed after it move no pinned version, and the header's command rebuilds
+it byte for byte. `pip-audit --require-hashes --disable-pip` found no known
+vulnerability on 2026-11-12. CI repeats the install and the audit on every
+change.
+
+**The trial.** A throwaway script (not kept) ran the app with a stub provider,
+in stateless JSON mode, under uvicorn on a Unix socket in a mode-700 folder,
+from an empty folder with an empty environment, and sent requests over the
+socket with Host `mcp.rsboom.com`. Seen, and the task that proves it again:
+
+1. *Resource metadata* is at `/.well-known/oauth-protected-resource/mcp` (the
+   path-suffixed form; the bare path answers 404), with `resource` exactly
+   `https://mcp.rsboom.com/mcp` and `authorization_servers`
+   `["https://mcp.rsboom.com"]`. No `scopes_supported` while no scope is
+   required. nginx's `\.well-known/` location covers it. T1.6.
+2. *Authorization-server metadata* has the issuer without a trailing slash,
+   S256 as the only challenge method, and no registration or revocation
+   endpoint while both options are off. It advertises `client_secret_post`
+   and `client_secret_basic` although a client record accepts only the one
+   method it names (`mcp-expert`, from the source), and no
+   `scopes_supported`. T1.6 settles the method and the one scope (D-8).
+3. *`/register`* answers 404 to GET and POST. T1.6 (R-5.9).
+4. *`/mcp`* answers 401 with `WWW-Authenticate: Bearer error="invalid_token",
+   error_description="Authentication required",
+   resource_metadata="https://mcp.rsboom.com/.well-known/oauth-protected-resource/mcp"`
+   to no token, an unknown token and a token issued for another resource;
+   that URL resolves. A good token gets 200. The SDK sends
+   `error="invalid_token"` even when no token was sent, which RFC 6750 says
+   it should not; Claude keys on the 401 and the pointer, so it is harmless
+   and T1.6 does not assert it. The 401 never carries `scope=`, so Claude
+   takes its scopes from the resource metadata's `scopes_supported`, which
+   comes from `required_scopes`. T1.6 (R-6.8, R-6.11).
+5. *The audience check* (`validate_token_resource=True`) switches on with no
+   warning. Left unset it warns and means off, and a token for another
+   service is accepted: advisory GHSA-w4fh-qvv9-3v23, whose fix in 2.2.0 is
+   this switch. It must be set. With it set, a token whose `resource` is
+   empty is refused too, and the SDK hands the provider the client's
+   `resource` unchanged at authorize and at token. So if Claude leaves
+   `resource` out, every token fails unless the provider puts the service's
+   own address on it; T1.6 does that and refuses any other value (R-6.11).
+6. *Stateless JSON on protocol 2025-11-25.* `initialize`,
+   `notifications/initialized` (202), `tools/list` and `tools/call` all work
+   with no session id; every answer is `application/json` with no
+   `Mcp-Session-Id`, and `initialize` returns the server instructions. The
+   2026-07-28 revision is served too: the `MCP-Protocol-Version` header
+   routes any later value to its own handler, behind the same sign-in and
+   with its own Host and Origin check. That revision has no `initialize`, so
+   the trial's probe was malformed for it (400, a missing `_meta` envelope);
+   it was not exercised. T1.10 tests both revisions or records why not.
+7. *Tool errors.* A plain exception comes back as `isError` with only "Error
+   executing tool <name>", its message hidden, and the server logs a full
+   traceback. `ToolError` comes back as `isError` with "Error executing tool
+   <name>: <message>" and logs the message at INFO. A tool that returns
+   `CallToolResult(is_error=True)` itself is passed through unchanged, with
+   no prefix and no log (read in the source, not tried): the cleaner route
+   to R-7.4's one plain sentence, in voice especially. T1.10 chooses, and
+   T1.9 checks both logs against R-8.3.
+8. *Host and Origin.* Transport security with `mcp.rsboom.com` as the only
+   allowed host guards `/mcp` alone (421 to another Host); `/.well-known/*`,
+   `/token` and `/authorize` answer the same whatever the Host. It also runs
+   after the token check, so a wrong Host with no token gets 401. R-7.9
+   therefore needs a check of our own, outermost, across every route. With
+   no allowed origins, `/mcp` refuses any request that carries an `Origin`
+   header (403, the value logged), `https://claude.ai` included; one without
+   passes. Claude calls from Anthropic's servers, so an `Origin` is unlikely
+   but unseen; whether to allow `https://claude.ai` is decided in T1.10 with
+   `security-expert`, and T1.11 sees what Inspector sends.
+9. *Unix socket.* Listening on it is uvicorn's (`uds=`); `MCPServer.run()`
+   takes only a host and a port. uvicorn makes the socket mode 666, so the
+   folder's mode is the guard (D-6's 0750 runtime folder); the unit's
+   `UMask` does not narrow it. Any `www-data` process could therefore reach
+   the socket past nginx's allowlist and limits, so T2.2 checks the folder's
+   mode, owner and group, that `www-data` has no member beyond nginx, and
+   that a non-member's connection is refused; T1.11's local run uses a
+   mode-700 folder. No TCP port opened while it ran. A socket path is capped
+   at 108 bytes, which `/run/workspace-mcp/mcp.sock` is well inside. T1.10,
+   T2.2 (R-10.1).
+10. *Logs.* At WARNING the SDK logged a refused token's resource URL and a
+    refused Host value, and never a token. The HTTP client the alerts will
+    use (`httpx2`, `httpcore2`) puts a request's URL in exception text and in
+    INFO records, and Telegram's URL holds the bot token. So T1.9 logs a
+    failed alert as a fixed sentence, keeps those loggers at WARNING, and
+    proves it with a marker planted in each secret and each failure forced
+    (R-8.3).
+
+From Claude's documentation (`mcp-expert`, 2026-11-11): the client sends the
+client secret when the dialog's field is filled, needs S256 advertised, takes
+its scopes from the `401` or the metadata, posts form-encoded token requests
+and expects exactly `invalid_grant` on a dead refresh token.
+
 ## File Layout
 
 ```
 Workspace-MCP/
-  CLAUDE.md  memory.md  README.md  pyproject.toml  requirements.lock  .gitignore
+  CLAUDE.md  memory.md  README.md  pyproject.toml  .gitignore
+  requirements.in             the service's direct dependency, the input to pip-compile
+  requirements.lock           what the service runs: every package, pinned with hashes
   config.toml                 repos, users, write paths, deny-list, result caps
   .github/workflows/tests.yml pytest, the traceability test and pip-audit, every PR and push to master
   .claude/agents/mcp-expert.md
@@ -920,34 +1034,12 @@ characters per result, and GitHub's free plan, which has no branch protection.
   handle granted is recorded here. The token goes into
   the env file and a Bitwarden note by your hand; names only here. Before
   Phase 2.
-- **SDK findings so far** (`mcp-expert`, 2026-11-11, from the source of
-  `mcp` 2.3.0, the latest release; to be confirmed for whichever version
-  T1.1 pins):
-  - `mcp.server.fastmcp` only raises an error in 2.x; the class is
-    `MCPServer` in `mcp.server.mcpserver`. Pinning `mcp<2` keeps the old name.
-  - Stateless mode, JSON responses, server instructions and a custom
-    authorization-server provider are all present.
-  - The registration route is mounted only when registration is enabled
-    (off by default) and is then also left out of the published metadata, so
-    "no `/register`" needs no workaround.
-  - **Off by default, and must be switched on:** checking that an access
-    token was issued for this service's own address (the MCP authorization
-    spec says servers must; spec R-6.11), and host-name protection with
-    `mcp.rsboom.com` as the only allowed host (spec R-7.9).
-  - Claude's client sends the client secret when the dialog's field is
-    filled, needs S256 advertised, takes its scopes from the `401` or the
-    metadata, posts form-encoded token requests and expects exactly
-    `invalid_grant` on a dead refresh token.
-  - Not verified: which client-authentication methods the SDK's token
-    endpoint accepts, and whether Claude's client sends the `resource`
-    parameter.
-- **SDK behaviour.** Confirm the pinned `mcp` version serves the protected
-  resource metadata and the `401` + `resource_metadata` header with our own
-  provider, works with a fixed client and no registration route, supports
-  stateless JSON mode alongside it, listens on a Unix socket, and which Host
-  headers its transport security accepts (`mcp.rsboom.com` must be listed),
-  and that every package in the lock installs as a ready-built file on
-  Python 3.14. First task of Phase 1.
+- **What Claude's client sends.** The SDK's side is settled ("The SDK, as
+  Tried"); the client's is not, and only the real client shows it: which
+  way it sends the client secret (`client_secret_post` or `_basic`), whether
+  it sends `resource`, which protocol revision it negotiates, and whether
+  its requests carry an `Origin` header. Inspector in T1.11 shows
+  Inspector's behaviour, not Claude's; Claude's is seen in Phase 2.
 - **Voice mode with a custom connector.** Voice calls the built-in Gmail
   connector; a custom one is likely but unproven until Phase 2. Text chat
   works either way.

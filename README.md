@@ -12,7 +12,8 @@ Status: designed and specified, nothing runs yet. See
 
 ```
 python3 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt -r requirements.lock
+.venv/bin/pip install --require-hashes --only-binary :all: -r requirements.lock
+.venv/bin/pip install -r requirements-dev.txt
 .venv/bin/pytest
 ```
 
