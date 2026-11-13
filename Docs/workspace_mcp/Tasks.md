@@ -23,7 +23,7 @@ Done when: every task is ticked, CI is green, the sign-in flow completes in
 MCP Inspector against the local run, and the sandbox trial's results are
 recorded in `Plan.md`.
 
-- [ ] T1.1 Settle the SDK's behaviour and pin it — criteria: R-9.5, R-10.7 (the lock and its install only; a trial: the answers to Plan's open question "SDK behaviour" are recorded there; `requirements.lock` gains the pinned SDK and every package it depends on, with hashes, made by a pinned tool in `requirements-dev.txt`, and installable as ready-built packages only on Python 3.14; CI and the README install it that way) — tests: none
+- [x] T1.1 Settle the SDK's behaviour and pin it — criteria: R-9.5, R-10.7 (the lock and its install only; a trial: the answers to Plan's open question "SDK behaviour" are recorded there; `requirements.lock` gains the pinned SDK and every package it depends on, with hashes, made by a pinned tool in `requirements-dev.txt`, and installable as ready-built packages only on Python 3.14; CI and the README install it that way) — tests: none
 - [ ] T1.2 The repo guards itself: no credential in tracked files, the assistant's deny rules, dependencies pinned by hash and audited on every change and weekly — criteria: R-9.3, R-9.4, R-9.5 — tests: `tests/workspace_mcp/test_repo_hygiene.py` [P]
 - [ ] T1.3 Configuration and its validation — criteria: R-1.1, R-1.4, R-9.1, R-9.2 — tests: `tests/workspace_mcp/test_config.py`
 - [ ] T1.4 Which repos exist for a user, and the tool that lists them — criteria: R-1.2, R-1.3 — tests: `tests/workspace_mcp/test_visibility.py`
