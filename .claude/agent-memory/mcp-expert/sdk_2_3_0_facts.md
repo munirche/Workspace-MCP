@@ -24,4 +24,9 @@ Verified 2026-11-12 from the installed .venv (rg skips .venv via gitignore: Read
 - Tool errors (tools/base.py, server.py:437-456): ToolError -> "Error executing tool <name>: <msg>", logged INFO with msg; other exceptions -> generic, logger.exception. A tool returning CallToolResult(is_error=True) passes through convert_result unchanged (func_metadata.py:204-207), no prefix, no SDK log.
 - Origin: absent passes; present must exactly match allowed_origins (or `:*` port wildcard), else 403 and the value is logged at WARNING.
 - uvicorn uds chmods socket 0o666 unless the file pre-exists.
+- Tool annotated `-> str` (or any primitive) gets an output schema with wrap_output: result carries the text twice (TextContent + structuredContent {"result": ...}) (func_metadata.py:209-225, 534-536). Returning CallToolResult directly or structured_output=False avoids it.
+- validate_issuer_url (auth/routes.py:25-43): https required except host localhost/127.0.0.1/[::1]; no query, no fragment. allowed_hosts match is exact incl. port, or `host:*`.
+- uvicorn on uds: scope client is None (getpeername on AF_UNIX not a tuple, protocols/utils.py:13-27); ProxyHeadersMiddleware trusts only if client in forwarded_allow_ips (default "127.0.0.1,::1" or env FORWARDED_ALLOW_IPS), None never trusted unless "*". So XFF is ignored on a UDS unless forwarded_allow_ips="*"; with "*" it takes the FIRST XFF entry.
+- ctx.request_context.request is the Starlette Request (mcpserver/context.py:296 reads its headers).
+- Claude building page 2026-11-12: ~150,000 chars per result and 240 s per call (claude.ai/Desktop); Claude Code 25,000 tokens.
 - Claude auth docs 2026-11-12: canonical 401 is `Bearer resource_metadata=...`; scopes from 401 `scope` else PRM scopes_supported; offline_access appended only if AS metadata lists it; outbound range stated as 160.79.104.0/21.

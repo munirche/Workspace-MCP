@@ -1,9 +1,10 @@
 # Tasks: Workspace MCP
 
-Status: tasks approved by Munir 2026-11-12 (phases 1–2); phases 3–5 draft
+Status: tasks approved by Munir 2026-11-12 rev 2 (phases 1–2); phases 3–5 draft
 
 <!-- Only Munir edits the status line. Format:
      Status: tasks approved by Munir <YYYY-MM-DD> (phases 1–2); phases 3–5 draft
+     (add `rev N` after the date when re-approved the same day)
      Tasks are 2–4 hour units. Each cites the criteria it satisfies and the test
      files that will prove them. [P] = may run in parallel with neighbours. -->
 
@@ -27,7 +28,7 @@ recorded in `Plan.md`.
 - [ ] T1.2 The repo guards itself: no credential in tracked files, the assistant's deny rules, dependencies pinned by hash and audited on every change and weekly — criteria: R-9.3, R-9.4, R-9.5 — tests: `tests/workspace_mcp/test_repo_hygiene.py` [P]
 - [ ] T1.3 Configuration and its validation — criteria: R-1.1, R-1.4, R-9.1, R-9.2 — tests: `tests/workspace_mcp/test_config.py`
 - [ ] T1.4 Which repos exist for a user, and the tool that lists them — criteria: R-1.2, R-1.3 — tests: `tests/workspace_mcp/test_visibility.py`
-- [ ] T1.5 The one place that runs version control: caller text is only ever data, time limits, and nothing a repo's own settings name is ever run — criteria: R-3.3, R-3.4, R-3.9 — tests: `tests/workspace_mcp/test_git.py` [P]
+- [ ] T1.5 The one place that runs version control: caller text is only ever data, time limits, and nothing a repo's own settings name is ever run — criteria: R-3.3, R-3.4, R-3.9, R-3.10 — tests: `tests/workspace_mcp/test_git.py` [P]
 - [ ] T1.6 Starting and finishing a sign-in: the one client, its return address, the proof key, the client's secret, no registration, the "authorisation required" answer — criteria: R-5.8, R-5.9, R-5.10, R-6.6, R-6.8, R-6.11, R-6.12, R-6.13 — tests: `tests/workspace_mcp/test_auth_flow.py`
 - [ ] T1.7 Tokens: lifetimes, replacement, grace, reuse, cancel-all, restart — criteria: R-6.1, R-6.2, R-6.3, R-6.4, R-6.5, R-6.7, R-6.9, R-6.10 — tests: `tests/workspace_mcp/test_tokens.py`
 - [ ] T1.8 The sign-in window, the page and the passphrase — criteria: R-5.1, R-5.2, R-5.3, R-5.4, R-5.5, R-5.6, R-5.7 — tests: `tests/workspace_mcp/test_login.py`

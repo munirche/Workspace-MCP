@@ -1,6 +1,6 @@
 # Spec: Workspace MCP
 
-Status: in force for phases 1–2, approved with `Tasks.md` by Munir 2026-11-11; later phases draft
+Status: in force for phases 1–2, approved with `Tasks.md` by Munir 2026-11-12; later phases draft
 Created: 2026-11-11
 Plan: `Docs/workspace_mcp/Plan.md` · Tasks: `Docs/workspace_mcp/Tasks.md`
 
@@ -84,6 +84,7 @@ Only tracked text files are served, decided by membership in the tracked list ra
 - R-3.7 WHEN a user asks for a repo's project context THE SYSTEM SHALL return its instructions file, the end of its time log when it has one, its current branch, its last ten commits and a summary of its status, each obtained under the same rules as any other read.
 - R-3.8 THE SYSTEM SHALL leave a live repo exactly as it found it: after any operation no file, folder or version-control state in it has been created, changed or removed.
 - R-3.9 THE SYSTEM SHALL NOT run any program named by a repo's own configuration, attributes or hooks, whatever that repo's version-control settings say.
+- R-3.10 THE SYSTEM SHALL NOT let a repo's own version-control settings make it read or write anything outside that repo.
 
 ### R-4 Writing notes
 
@@ -158,7 +159,7 @@ There is no sign-in page unless Munir has opened one, and only the one configure
 
 ### R-9 Configuration and data requirements
 
-- R-9.1 THE SYSTEM SHALL read its secrets (the passphrase hash, the client's identifier and secret, the alert credentials) from its environment, never from configuration kept in the repo, and IF one is missing THEN SHALL refuse to start, naming the missing item and never a value.
+- R-9.1 THE SYSTEM SHALL read its public address and its secrets (the passphrase hash, the client's identifier and secret, the alert credentials) from its environment, never from configuration kept in the repo, and IF one is missing THEN SHALL refuse to start, naming the missing item and never a value.
 - R-9.2 THE SYSTEM SHALL read from configuration, each with a default, the page size, the list and search limits, the result size limit, the operation time limit, the refresh interval for synced repos, the note size limit and additions to the deny-list, and SHALL NOT make the token lifetimes, the grace period, or the sign-in window's length and allowed wrong attempts configurable.
 - R-9.3 THE project's tracked files SHALL contain no credential: no key in a known vendor format, no private-key block, no passphrase hash.
 - R-9.4 THE project's shared assistant settings SHALL deny the assistant reading the server's environment files, the service's key folder and any process's environment, showing service definitions, and running commands as administrator.
@@ -209,6 +210,8 @@ this server, so no health-data safeguard applies.
 None open.
 
 Resolved 2026-11-11 by Munir: a note edited from the phone gains the first line even if the service did not create it, and the line names who ordered it and from which application, so other applications can be added later (R-4.6). `inbox/` and `handoff/<repo>.md` stand for now; they are configuration and can change as the vault is tuned. The alert bot is a new Telegram bot named `MRC_MCP_Bot` (`MRC_MCP_1_Bot` if the handle is taken), used for nothing else, writing to Munir's private chat with it (R-8.5, R-10.9); the handle BotFather actually grants is recorded in `Plan.md` when the bot is created in Phase 2.
+
+Changed 2026-11-12 by Munir, at the Clarify gate of T1.2, T1.3, T1.5 and T1.9: R-9.1 gains the service's public address, which no criterion covered although the sign-in metadata and the Host check are built from it; R-3.10 is new, because a live repo's own settings can point version control at files outside the repo, which R-3.9 (programs only) does not cover.
 
 ## Completeness checklist
 
