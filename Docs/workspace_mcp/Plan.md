@@ -100,7 +100,7 @@ A private repo `munirche/Workspace-MCP`, scaffolded with
 installer (README). The service is recorded where this box's other facts
 live, AI-Data-Expert's `Docs/Infrastructure/` (D-11).
 
-### D-2: Python + the official `mcp` SDK, stateless (2026-10-30, revised 2026-11-10)
+### D-2: Python + the official `mcp` SDK, stateless (2026-10-30, revised 2026-11-10 and 2026-11-12)
 
 House default, Python
 3.14 is installed (Ubuntu 26.04.1), and the SDK's app class (`FastMCP` in the 1.x line, renamed `MCPServer`
@@ -111,8 +111,10 @@ nothing needs it, and cancelling tokens is an administrator command on the box. 
 HTTP in stateless mode with JSON responses, so a restart or deploy never
 breaks Claude's connection and nginx holds no long-lived streams.
 Dependencies are pinned in a lock file and audited for advisories in CI
-(I-15); an SDK upgrade is a deliberate bump, test run and deploy. The
-google-genai 3.0 and SQLAlchemy 2.1 breakages of 2026-11-06/07 are what an
+(I-15); an SDK upgrade is a deliberate bump, test run and deploy. The lock
+is made by `pip-compile --generate-hashes` (pip-tools, pinned in
+`requirements-dev.txt`) and its header carries the command, so a bump is
+that command run again. The google-genai 3.0 and SQLAlchemy 2.1 breakages of 2026-11-06/07 are what an
 unpinned dependency does. TypeScript rejected: it adds Node tooling to a box
 that already runs two Node installs.
 
@@ -869,6 +871,11 @@ PR.
   records what it was asked to send; time is injected, so lifetimes and the
   grace period are tested without waiting. The OAuth flow is driven through
   the app's own routes, not only the functions behind them.
+- **The lock, installed as the deploy installs it:** CI installs
+  `requirements.lock` with `--require-hashes --only-binary :all:`, in its own
+  step before the test tools, so a package with no ready-built file for
+  Python 3.14 fails the pull request, not the deploy (R-10.7). GitHub's
+  runners are x86_64 Linux, like this box.
 - **Traceability:** `tests/test_architecture.py` holds the three edges of
   `SDD.md` (every criterion owned by a task, every finished phase's criteria
   tested, no test naming a criterion that does not exist), plus the
@@ -938,8 +945,9 @@ characters per result, and GitHub's free plan, which has no branch protection.
   resource metadata and the `401` + `resource_metadata` header with our own
   provider, works with a fixed client and no registration route, supports
   stateless JSON mode alongside it, listens on a Unix socket, and which Host
-  headers its transport security accepts (`mcp.rsboom.com` must be listed).
-  First task of Phase 1.
+  headers its transport security accepts (`mcp.rsboom.com` must be listed),
+  and that every package in the lock installs as a ready-built file on
+  Python 3.14. First task of Phase 1.
 - **Voice mode with a custom connector.** Voice calls the built-in Gmail
   connector; a custom one is likely but unproven until Phase 2. Text chat
   works either way.
