@@ -85,4 +85,22 @@ What it does not guarantee, each owned by a Phase 3 task (or a later T1.5 fix, c
 - **Blocking and time:** `_spawn` is synchronous and each call spawns twice (listing, then the operation), so one call may take twice the limit, and project context (R-3.7) several times that. Property: off the event loop, one overall deadline per tool call under the client's 240 seconds, and a cap on concurrent git calls.
 - **Charsets:** a commit's `encoding` header and the `working-tree-encoding` attribute (which a pulled commit can set) choose a glibc iconv charset in-process. The box's glibc patch level is the guard.
 
+From the T1.4 Clarify gate (2026-11-16; my advice, check `paths.py` and `test_visibility.py` at Review):
+
+- **Write without read:** no decision was recorded in Spec or Plan by this date. Advised: build "invisible" now (the fail-closed reading of D-12's "does not exist for them"); an R-1.4 line refusing such a config at start stays Munir's optional extra, not a blocker. If he adds it, the invisible rule stays as the second layer.
+- **Refusal decided from the user's own lists only:** the missing answer is reached without consulting `config.repos`, so "not configured" and "not readable" are one path by construction (type, text, args, no chained cause). Echo the name only when it fits R-1.4's name shape and a short bound; otherwise the same sentence without it.
+- **T1.10 / Phase 3 / Phase 4:** the repo lookup is the first check in every tool that can give a repo-dependent answer (before path, write-permission or git); no second log record tells the two causes apart; `list_repos` returns name and writable only, never `path`, `remote`, `push_key` or `source`.
+- **Plan gate (2026-11-16, nothing blocking):** the plan carried all of the above. Two test additions offered, check at Review: the refusal's `args` is the message alone (comparing `args` for one name across configs passes even when `args` holds the raw caller value, which then reaches any `repr`); `list_repos` also runs against a `repos` mapping that raises.
+
+From T1.4 Review (2026-11-16, uncommitted branch `t1.4-visibility`, nothing blocking; read `paths.py` and `test_visibility.py` before raising again, the fixes offered were Munir's to take or decline):
+
+What `paths.py` guarantees: the refusal is reached from the user's own read tuple alone, so "not configured" and "not readable" are one code path (same type, text, args, timing, no chained cause, no log record); the echoed name is at most 64 characters of R-1.4's ASCII set (no quote, no control character), and whether it is echoed depends on the caller's value only; `list_repos` gives name and writable for readable names only, in an order that depends on the user's own list only. Both Plan-gate test additions landed.
+
+What the tests did not prove at Review (offered, low):
+
+- The no-chained-cause assertion covered only the configured-but-unreadable refusal, not the not-configured one, and the raising-mapping test compared text only. A lookup of `config.repos` first inside a broad `except` would pass every test while chaining a `KeyError` on one side only (a traceback line that tells the causes apart). Check whether the assertion was widened.
+- A non-str user (the `isinstance` guard) had no test. The user comes from the token, not the caller, and the failure is a `TypeError`, not a grant.
+
+Still owned by T1.10: `RepoMissing` is caught by name and answered with its sentence; its traceback (frame locals hold the raw name) is never rendered; the no-log test proves only that `paths.py` is silent, not the tool wrapper.
+
 Related: [[supply-chain-decisions]]

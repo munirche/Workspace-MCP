@@ -2,7 +2,7 @@
 
 ## Current State
 
-**As of 2026-11-16.** Phase 1 is under way; five of its eleven tasks are
+**As of 2026-11-16.** Phase 1 is under way; six of its eleven tasks are
 built, none wired together yet. T1.1 pinned `mcp` 2.3.0 and its dependencies
 by hash and tried the SDK ("The SDK, as Tried"). T1.2: the repo checks
 itself (no tracked credential, deny-only assistant settings, the lock pinned
@@ -14,10 +14,12 @@ tool calls, and cuts the SDK's own log records to fixed sentences. T1.5:
 `git.py`, the one place git runs: caller text is data, one time limit kills
 the whole process group, every program a repo's settings could name is
 switched off on each call, and a repo whose settings reach outside it is
-refused. Munir approved phases 1–2 in `Tasks.md` (rev 2, 2026-11-12);
-phases 3–5 are draft.
-**Next:** T1.4, then T1.6 to T1.8 and T1.10, each with
-`/build mcp security task <id>`.
+refused. T1.4: `paths.py` decides which repos a user may read, from the
+user's own lists alone, and refuses any other name with the one answer a
+missing repo gets; `list_repos` gives names and whether each is writable.
+Munir approved phases 1–2 in `Tasks.md` (rev 2, 2026-11-12); phases 3–5
+are draft.
+**Next:** T1.6 to T1.8, then T1.10, each with `/build mcp security task <id>`.
 **Watch:** sessions on the box cannot `sudo`, so every deploy step is Munir's,
 from `deploy/DEPLOY.md`. Claude never sees a real secret: the local trial uses
 throwaway values. Anthropic's address ranges and the connector's sign-in rules
@@ -823,7 +825,12 @@ socket with Host `mcp.rsboom.com`. Seen, and the task that proves it again:
    `CallToolResult(is_error=True)` itself is passed through unchanged, with
    no prefix and no log (read in the source, not tried): the cleaner route
    to R-7.4's one plain sentence, in voice especially. T1.10 chooses, and
-   T1.9 checks both logs against R-8.3.
+   T1.9 checks both logs against R-8.3. So the modules' own refusals
+   (`paths.RepoMissing`, `git`'s errors) are caught by the tool layer and
+   returned that way, or the SDK hides their sentence. A tool returning a
+   list is split into one text block per item, and an empty list sends no
+   text at all (read in the source), so T1.10 phrases `list_repos`' answer
+   itself, an empty one included.
 8. *Host and Origin.* Transport security with `mcp.rsboom.com` as the only
    allowed host guards `/mcp` alone (421 to another Host); `/.well-known/*`,
    `/token` and `/authorize` answer the same whatever the Host. It also runs
