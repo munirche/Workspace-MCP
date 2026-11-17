@@ -25,16 +25,16 @@ From the Clarify gate for T1.2, T1.3, T1.5, T1.9 (2026-11-12, built unattended o
 - **All four:** credential-shaped test values are built at run time in every test file, not only T1.2's, or master fails the R-9.3 scan after the merges. No test reads the real process environment or the real home folder (D-6: dev keys live in munir's environment, and pytest prints compared mappings on failure). Checks print file, line and name, never a matched value.
 - **T1.2 (R-9.4):** my view: "any process's environment" includes the session's own; the deny list is a net (the vendor's docs say Bash rules match literal command text), and Munir names the exact rules, not the session. The test should also pin the settings file to deny rules only. Unit files read through the Read tool were not denied at b13f934.
 - **T1.3:** landed, see "From T1.3 Review" below.
-- **T1.5:** git's child environment is built from scratch (no service secret, no inherited GIT_*, pager or editor names); system and global config are not read; a timeout kills the whole process group; a negative count is refused; the module logs no argv, stdout or stderr.
+- **T1.5:** landed, see "From T1.5 Review" below.
 - **T1.11 (sandbox trial):** the "repo owned by another user" path (safe.directory) cannot be exercised by offline tests, which run as the repo's owner. The trial should run the seeded hostile repo as the throwaway user.
-- **T3.1 / T3.6:** repo settings that redirect what git reads (not programs, so R-3.9 as worded does not cover them). Property: git reads only the configured repo's own folder and object store. No criterion owned this at the gate; check whether R-3.9 was widened or a line was added.
+- **T3.1 / T3.6:** R-3.10 was added 2026-11-12 for settings that redirect what git reads. It covers version-control settings only; what the work tree itself does to a search is in "From T1.5 Review" below.
 - **Before Phase 3 and Phase 4 deploys:** git published security fixes on 2026-11-10 (2.53.1 on the box's track) touching merges, clones and submodules. Not relevant to Phase 1's read-only module; confirm the box's package carries them before the service fetches and rebases (Munir or a session: `git --version` and the package changelog, no secret in the output).
 
 From the Plan gate for the same four tasks (2026-11-12; my advice, check each branch's tests at Review):
 
 - **T1.2:** `.claude/` is a protected path in Claude Code (prompted, refused or classifier-decided by mode; checked in the vendor docs 2026-11-12), so the settings edit is Munir's, not an unattended session's. Scanner: prefix rules carry a body length, tracked symlinks are not followed, one hash grammar shared with T1.3 and the helper.
 - **T1.3:** all four landed (Review 2026-11-16).
-- **T1.5:** git never enters a submodule; `.git` and what git reads under it are real files and folders, and no `commondir` file; settings are listed with git's own parser, not a second one; every seed has a positive control (plain git writes the canary); output shape fixed on the command line. Put to Munir: the listing-then-override gap (a writer of `.git/config` can add a driver between the two) as an accepted residual; my trigger would be a live repo written by anyone but Munir. Read D-6 for what he chose.
+- **T1.5:** landed. The listing-then-override gap was accepted by Munir 2026-11-16 (Plan D-6, Git bullet; trigger: a live repo written by anyone but `munir`).
 - **Unattended runs:** a stopped task's files must not ride into the next branch (stash with untracked, stage by path).
 
 From T1.3 Review (2026-11-16, uncommitted branch `t1.3-config`, nothing blocking; read `config.py` and `test_config.py` before raising any of these again, since the fixes offered were Munir's to take or decline):
@@ -46,7 +46,7 @@ What it does not guarantee, each owned by a later task:
 - **T2.x drop-in generator:** a checkout `path` is only absolute and normalised; it may hold a newline, colon, space, percent sign or quote, and may be a symlink. The generator writes the bind line from the validated name and the fixed prefix, never from the config's string, and refuses a path that is not that exact string.
 - **T2.1 deploy:** the deploy shows the generated drop-in, not `config.toml`, so a pushed change to users, `write_paths`, limits or deny additions ships unseen. Property: the deploy shows the diff of `config.toml` too. No decision recorded; put to Munir at the T2.1 Plan gate.
 - **T1.5 / T3.3:** names may start with a hyphen (R-1.4 allows it), so a name is never a bare argv word; the remote goes after `--`, with ssh as the only allowed transport. No host allowlist in the loader: the pinned known-hosts file is the guard.
-- **T1.5:** `git_timeout_seconds` had no ceiling at Review (the client allows 240 seconds per call); check whether one was added.
+- **Phase 3:** `git_timeout_seconds` had no ceiling at the T1.3 Review (the client allows 240 seconds per call); see the time bullet under "From T1.5 Review".
 - **T1.6 / T1.10:** the loader accepted all-numeric and non-canonical IPv6 hosts, which the SDK's URL type rewrites, so issuer and allowed host could differ from what is published (fails closed). With a non-default port the allowed host carries the port while nginx forwards `$host` without one. The SDK's URL type puts its input in its error text, so build the settings from the loader's fields and catch its error by name only.
 - **T1.8:** the hash's n, r and p are any digits; a value scrypt refuses, or one over its memory limit, starts cleanly and fails at the first sign-in. That failure must be a plain refusal with nothing of the hash in the log.
 - **T1.6 / T1.8:** client id and client secret have no shape check (inner whitespace or a control character passes). The bot token and chat id are shape-checked by T1.9's sender.
@@ -69,5 +69,20 @@ What it does not guarantee, each owned by a later task:
 - **T1.10 / T2.2 (address):** the address comes from the one header nginx overwrites with the peer's address, never a client-supplied chain, or an alert can name any IP the caller likes.
 - **T1.10 (token local):** the sender takes the bare token string; the frame that unwraps it must not be one whose locals can be rendered (same rule as the entry-point bullet above).
 - **T1.10 (record order):** the tool-call record is written before the allow or deny decision acts, so a refused call is recorded too.
+
+From T1.5 Review (2026-11-16, uncommitted branch `t1.5-git`, nothing blocking its four criteria; read `git.py` and `test_git.py` before raising again, the fixes offered were Munir's to take or decline):
+
+What `git.py` guarantees: git's environment is built from nothing; system and global config, system attributes and replace refs are off; every program-naming key the four read operations consult is overridden on the command line, with each filter and diff driver found by git's own parser; caller text goes after `-e` or `--` with literal pathspecs and is one line of at most 4096 characters; the count is a bounded int; stderr is discarded and every error is a fixed sentence; the whole session is killed with SIGKILL on timeout, cap or normal exit. Seeds have positive controls and Munir's session ran mutations.
+
+What it does not guarantee, each owned by a Phase 3 task (or a later T1.5 fix, check first):
+
+- **Search tool (the top carry):** `git grep` on the work tree opens each tracked name with no check on leading folders (read in git 2.53.0's `grep.c` and `builtin/grep.c`; not run). A tracked folder swapped for a symlink sends the search outside the repo, to anything the service user can read. Not a version-control setting, so R-3.10 does not own it. Property: no search result comes from a file whose real path is outside the repo or which the path-deciding module would refuse; every path `grep` and `ls_files` return passes through that module before any text is returned; a seed with a positive control proves it.
+- **Returned paths are untrusted text:** they come from the index, which a writer of `.git` can craft (`..`, absolute, control characters). Deny patterns apply to results, not only to the caller's path argument.
+- **Symlink depth:** at Review only `.git`, `.git/info` and `.git/objects/info` were scanned. `objects/pack`, a fan-out folder or anything under `refs` could link to another store, and index entries flagged assume-unchanged make `grep` read blobs, under any name the index gives them (so past a path deny list). Empty room with one user; matters at D-12's second user. Check whether the scan was widened.
+- **Git 2.54 or later on the box:** config-named hooks (`hook.<name>.command`, checked 2026-11-16 in GitHub's 2.54 highlights) are not switched off by `core.hooksPath`. Read operations fire no hook while `GIT_OPTIONAL_LOCKS=0` holds and the mount is read-only, so one guard fewer, not a hole. The override list is a denylist: each git upgrade needs the release notes read for new program-naming keys and the seeds re-run on that version.
+- **Exceptions that are not `GitError`:** `OSError` from lstat, scandir or Popen (its text holds the repo path) and `UnicodeEncodeError` for a lone surrogate in caller text. Tools answer any unknown exception with a fixed sentence.
+- **Truncation:** the last item of a cut `ls_files`, `status` or `log` answer may be a cut path or subject.
+- **Blocking and time:** `_spawn` is synchronous and each call spawns twice (listing, then the operation), so one call may take twice the limit, and project context (R-3.7) several times that. Property: off the event loop, one overall deadline per tool call under the client's 240 seconds, and a cap on concurrent git calls.
+- **Charsets:** a commit's `encoding` header and the `working-tree-encoding` attribute (which a pulled commit can set) choose a glibc iconv charset in-process. The box's glibc patch level is the guard.
 
 Related: [[supply-chain-decisions]]

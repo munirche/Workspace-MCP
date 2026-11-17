@@ -2,27 +2,22 @@
 
 ## Current State
 
-**As of 2026-11-16.** Phase 1 is under way. T1.1 pinned `mcp` 2.3.0 and its 27
-dependencies by hash in `requirements.lock` (ready-built files only, none
-younger than 14 days) and tried the SDK on this box; the answers are in "The
-SDK, as Tried". T1.2 made the repo check itself: no tracked file holds
-anything credential-shaped, the shared assistant settings hold only deny
-rules and deny every way to a secret, the lock pins each package by version
-and hash and matches what is installed, and CI audits it on every change
-and weekly, also when tests fail. T1.3 built `config.py`: `config.toml`
-(claude-config only) gives repos, users, limits and deny additions, each
-refused by name when malformed; the environment gives the public address
-(strict form, from which the issuer, resource and allowed host are derived
-as the SDK holds them) and the secrets, held in a wrapper that never shows
-its value. T1.9 built `alerts.py`: the four sign-in alerts as fixed
-sentences with UTC time and a checked address, sent to Telegram with the
-standard library (no proxy, no redirect, bounded wait); a failed delivery is
-one warning and the caller carries on; the tool-call record is one escaped
-line of five fields; and the SDK's own log records are cut to fixed
-sentences. Nothing uses the configuration or the alerts yet (T1.6–T1.10
-wire them). Munir approved phases 1–2 in `Tasks.md` (rev 2, 2026-11-12);
+**As of 2026-11-16.** Phase 1 is under way; five of its eleven tasks are
+built, none wired together yet. T1.1 pinned `mcp` 2.3.0 and its dependencies
+by hash and tried the SDK ("The SDK, as Tried"). T1.2: the repo checks
+itself (no tracked credential, deny-only assistant settings, the lock pinned
+by hash and audited on every change and weekly). T1.3: `config.py` loads
+`config.toml` (claude-config only) and the environment's address and
+secrets, refusing any malformed entry by name, never by value. T1.9:
+`alerts.py` sends the four sign-in alerts, records failed deliveries and
+tool calls, and cuts the SDK's own log records to fixed sentences. T1.5:
+`git.py`, the one place git runs: caller text is data, one time limit kills
+the whole process group, every program a repo's settings could name is
+switched off on each call, and a repo whose settings reach outside it is
+refused. Munir approved phases 1–2 in `Tasks.md` (rev 2, 2026-11-12);
 phases 3–5 are draft.
-**Next:** T1.5, then T1.4, each with `/build mcp security task <id>`.
+**Next:** T1.4, then T1.6 to T1.8 and T1.10, each with
+`/build mcp security task <id>`.
 **Watch:** sessions on the box cannot `sudo`, so every deploy step is Munir's,
 from `deploy/DEPLOY.md`. Claude never sees a real secret: the local trial uses
 throwaway values. Anthropic's address ranges and the connector's sign-in rules
@@ -33,7 +28,12 @@ refused, so T1.6 puts the service's own address on it when Claude sends none.
 Unverified until built: what Claude's
 client sends (secret method, `resource`, protocol revision, `Origin`), the
 sandbox options on this box, voice with a custom connector, and whether the
-app can be told to always allow a write.
+app can be told to always allow a write. For Phase 3: search results must
+pass the path module before any text is returned, since a work-tree folder
+swapped for a link sends `git grep` elsewhere (T3.4); status needs an
+untracked count without names (R-3.6, T3.5); and fetch and push need their
+own override set in `git.py` (T3.3), each with `security-expert`. `git.py`
+was tested on git 2.53.0; rerun its seeds when the box's git moves.
 
 _Quick-orientation summary. Full plan below._
 
@@ -263,17 +263,27 @@ Search is `git grep`, which is installed and searches tracked files only.
   filter what the box sends to its own public address. So a compromised
   process cannot reach that gateway, sshd or any development server. It
   still reaches GitHub and Telegram.
-- *Git.* Told the mounts are safe (`safe.directory=/repos/*`) and to take
-  no locks (`GIT_OPTIONAL_LOCKS=0`), through the unit's environment. That
-  trust has a price: a live repo's own `.git/config` is written by `munir`'s
-  sessions and can name programs (a file-system monitor, a filter, a pager,
-  a hook) that git would then run as the service user, next to the vault key
-  and the env file's secrets. So the one module that runs git overrides or
-  disables every such setting on each call, reads paths literally
-  (`GIT_LITERAL_PATHSPECS=1`), and is tested against repos seeded with them
-  (spec R-3.9). The same settings can point git at files outside the repo
-  (another work tree, borrowed object stores, included config), which the
-  module also refuses (spec R-3.10).
+- *Git.* Told on each call that the repo is safe (`safe.directory=<repo>`)
+  and to take no locks (`GIT_OPTIONAL_LOCKS=0`), by the one module that runs
+  git, which builds git's environment from nothing rather than inherit the
+  unit's. That trust has a price: a live repo's own `.git/config` is
+  written by `munir`'s sessions and can name programs (a file-system
+  monitor, a filter, a pager, a hook) that git would then run as the
+  service user, next to the vault key and the env file's secrets. So the
+  module overrides or disables every such setting on each call (each filter
+  and diff driver the repo's config names, found with git's own parser),
+  never enters a submodule, reads paths literally (`GIT_LITERAL_PATHSPECS=1`),
+  and is tested against repos seeded with them, each seed first shown
+  firing under plain git (spec R-3.9). The same settings can point git at
+  files outside the repo (another work tree, borrowed object stores,
+  included config, a shared common folder, a link anywhere in `.git`),
+  which the module refuses before running (spec R-3.10). The loose-object
+  folders are checked but not entered (they hold thousands of files and
+  entering them costs up to 0.2 s a call), so one object file replaced by a
+  link is not seen; Munir to decide. Accepted by Munir
+  2026-11-16: a driver added to `.git/config` between the module's listing
+  and its call would run. Only `munir` writes those repos, and he already
+  has full access; revisit when a live repo is written by anyone else.
 - *Limits.* Memory, task and CPU caps, so a runaway search cannot starve
   the box.
 - Secrets sit in a root-only env file, per the secrets decision of
