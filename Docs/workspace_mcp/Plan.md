@@ -2,13 +2,16 @@
 
 ## Current State
 
-**As of 2026-11-12.** Phase 1 is under way. T1.1 pinned `mcp` 2.3.0 and its 27
+**As of 2026-11-16.** Phase 1 is under way. T1.1 pinned `mcp` 2.3.0 and its 27
 dependencies by hash in `requirements.lock` (ready-built files only, none
 younger than 14 days) and tried the SDK on this box; the answers are in "The
-SDK, as Tried". No feature code exists yet. Munir approved phases 1–2 in
-`Tasks.md`, re-dated 2026-11-12 when T1.1 grew to cover the lock's install;
-phases 3–5 are draft.
-**Next:** T1.2, then T1.3, each with `/build mcp security task <id>`.
+SDK, as Tried". T1.2 made the repo check itself: no tracked file holds
+anything credential-shaped, the shared assistant settings hold only deny
+rules and deny every way to a secret, the lock pins each package by version
+and hash and matches what is installed, and CI audits it on every change
+and weekly, also when tests fail. No feature code exists yet. Munir approved
+phases 1–2 in `Tasks.md` (rev 2, 2026-11-12); phases 3–5 are draft.
+**Next:** T1.3, T1.9 and T1.5, then T1.4, each with `/build mcp security task <id>`.
 **Watch:** sessions on the box cannot `sudo`, so every deploy step is Munir's,
 from `deploy/DEPLOY.md`. Claude never sees a real secret: the local trial uses
 throwaway values. Anthropic's address ranges and the connector's sign-in rules
