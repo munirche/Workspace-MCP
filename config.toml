@@ -1,0 +1,11 @@
+# Which repos the server may read, and who may read or write each.
+# No secret goes here: the public address and every secret come from the
+# service's environment (R-9.1).
+
+[repos.claude-config]
+source = "checkout"
+path = "/home/munir/GitRepos/claude-config"
+
+[users.munir]
+read = ["claude-config"]
+write = []
