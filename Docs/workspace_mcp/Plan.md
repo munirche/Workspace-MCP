@@ -14,9 +14,15 @@ and weekly, also when tests fail. T1.3 built `config.py`: `config.toml`
 refused by name when malformed; the environment gives the public address
 (strict form, from which the issuer, resource and allowed host are derived
 as the SDK holds them) and the secrets, held in a wrapper that never shows
-its value. Nothing uses the configuration yet. Munir approved phases 1–2
-in `Tasks.md` (rev 2, 2026-11-12); phases 3–5 are draft.
-**Next:** T1.9 and T1.5, then T1.4, each with `/build mcp security task <id>`.
+its value. T1.9 built `alerts.py`: the four sign-in alerts as fixed
+sentences with UTC time and a checked address, sent to Telegram with the
+standard library (no proxy, no redirect, bounded wait); a failed delivery is
+one warning and the caller carries on; the tool-call record is one escaped
+line of five fields; and the SDK's own log records are cut to fixed
+sentences. Nothing uses the configuration or the alerts yet (T1.6–T1.10
+wire them). Munir approved phases 1–2 in `Tasks.md` (rev 2, 2026-11-12);
+phases 3–5 are draft.
+**Next:** T1.5, then T1.4, each with `/build mcp security task <id>`.
 **Watch:** sessions on the box cannot `sudo`, so every deploy step is Munir's,
 from `deploy/DEPLOY.md`. Claude never sees a real secret: the local trial uses
 throwaway values. Anthropic's address ranges and the connector's sign-in rules
@@ -829,12 +835,17 @@ socket with Host `mcp.rsboom.com`. Seen, and the task that proves it again:
    at 108 bytes, which `/run/workspace-mcp/mcp.sock` is well inside. T1.10,
    T2.2 (R-10.1).
 10. *Logs.* At WARNING the SDK logged a refused token's resource URL and a
-    refused Host value, and never a token. The HTTP client the alerts will
-    use (`httpx2`, `httpcore2`) puts a request's URL in exception text and in
-    INFO records, and Telegram's URL holds the bot token. So T1.9 logs a
-    failed alert as a fixed sentence, keeps those loggers at WARNING, and
-    proves it with a marker planted in each secret and each failure forced
-    (R-8.3).
+    refused Host value, and never a token. `httpx2` puts a request's URL in
+    exception text and in INFO records, and Telegram's URL holds the bot
+    token, so T1.9 sends alerts with the standard library and no error leaves
+    the sender carrying the URL. T1.9's `quiet_sdk_logs` rewrites the server
+    logger's tool and resource records to fixed sentences, and on the
+    handlers it is given cuts every other `mcp.*` record to where it came
+    from. So T1.10 sets up the service's handlers before it builds
+    `MCPServer` (whose constructor calls `logging.basicConfig`) and passes
+    each of them, or keeps `mcp` from propagating to any other. `uvicorn.error`
+    tracebacks and `uvicorn.access` (which logs `/authorize`'s query) are
+    outside the filter, and nothing logs at DEBUG (R-8.3).
 
 From Claude's documentation (`mcp-expert`, 2026-11-11): the client sends the
 client secret when the dialog's field is filled, needs S256 advertised, takes
