@@ -216,9 +216,10 @@ def test_a_cut_history_holds_only_whole_commits(repo, home, plain):
     """Covers: R-3.3"""
     for number in range(3):
         plain("commit", "-q", "--allow-empty", "-m", f"commit {number}", cwd=repo)
-    # A commit is 81 bytes here: cut inside the second commit's fields, then
-    # inside the first commit's subject.
-    for limit, subjects in ((150, ["commit 2"]), (160, ["commit 2"]), (78, [])):
+    newest, second = _git(repo, home).log(2).items
+    sizes = [len("\0".join([c.sha, c.date, c.author, c.subject]).encode()) + 1 for c in (newest, second)]
+    # Cut inside the second commit's fields, inside its subject, then inside the first's subject.
+    for limit, subjects in ((sizes[0] + 50, ["commit 2"]), (sum(sizes) - 2, ["commit 2"]), (sizes[0] - 3, [])):
         output = _git(repo, home, max_bytes=limit).log(10)
         assert output.truncated
         assert [commit.subject for commit in output.items] == subjects
@@ -263,7 +264,7 @@ sleep 60
 def _state(pid):
     try:
         return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
-    except FileNotFoundError:
+    except OSError:
         return "Z"
 
 
@@ -403,11 +404,13 @@ def test_a_mailmap_outside_the_repo_is_never_read(repo, plain, home, outside):
 
 def test_a_signature_program_is_not_run(tmp_path, plain, home, canary):
     """Covers: R-3.9"""
+    # The fake reads all git writes to it first, or git's write could fail on a closed pipe.
     gpg = _script(tmp_path / "gpg", f"""
+cat > /dev/null
 for argument in "$@"; do
   if [ "$argument" = "--verify" ]; then touch {canary}; exit 1; fi
 done
-echo '[GNUPG:] SIG_CREATED ' >&2
+printf '\\n[GNUPG:] SIG_CREATED \\n' >&2
 printf -- '-----BEGIN PGP SIGNATURE-----\\n\\nAAAA\\n-----END PGP SIGNATURE-----\\n'
 """)
     root = tmp_path / "signed"
