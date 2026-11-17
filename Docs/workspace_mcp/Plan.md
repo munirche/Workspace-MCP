@@ -164,7 +164,9 @@ no-framing policy, so the sign-in page cannot be embedded in another site.
   signing in needs SSH at hand, a few times a year (see tokens).
 - *Passphrase.* Bitwarden-generated, made only for this server, stored as a
   scrypt hash (Python standard library) written
-  `scrypt$<n>$<r>$<p>$<salt>$<hash>`, salt and hash in base64, so the
+  `scrypt$<n>$<r>$<p>$<salt>$<hash>` (n, r and p in decimal; salt and
+  hash in standard base64 with padding, at least 16 and 32 characters
+  long), so the
   repo's credential scan can recognise one (R-9.3); `hash_passphrase.py`
   refuses anything under 20 characters. Compared in constant time.
 - *Tokens.* Random, stored hashed with their user id. Access 1 hour.

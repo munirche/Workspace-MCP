@@ -5,11 +5,20 @@
       "Read(//etc/*.env.*)",
       "Read(//etc/workspace-mcp/**)",
       "Read(//proc/**/environ)",
+      "Read(//etc/systemd/system/**)",
       "Bash(cat /etc/*.env*)",
       "Bash(systemctl cat *)",
       "Bash(systemctl show *)",
       "Bash(sudo *)",
-      "Bash(* /proc/*/environ*)"
+      "Bash(* /proc/*/environ*)",
+      "Bash(env)",
+      "Bash(printenv*)",
+      "Bash(export -p*)",
+      "Bash(export)",
+      "Bash(declare -x*)",
+      "Bash(declare -p*)",
+      "Bash(declare)",
+      "Bash(set)"
     ]
   }
 }
