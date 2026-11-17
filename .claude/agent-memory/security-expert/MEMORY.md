@@ -1,2 +1,2 @@
 - [Supply-chain decisions](project_supply_chain_decisions.md) — T1.1: dev tools unhashed (accepted), 14-day cutoff, only-binary line; three R-9.5 items put to Munir at T1.2
-- [Open carries](project_open_carries_t1_1.md) — properties T1.5 to T3.x must prove; what the T1.3 loader does and does not guarantee (2026-11-16); git fixes to confirm before Phase 3
+- [Open carries](project_open_carries_t1_1.md) — properties T1.5 to T3.x must prove; what the T1.3 loader and T1.9 alerts do and do not guarantee (2026-11-16); git fixes before Phase 3
