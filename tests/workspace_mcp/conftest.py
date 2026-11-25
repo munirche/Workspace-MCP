@@ -1,8 +1,10 @@
 """Shared pieces for the tests that drive the service through its own routes."""
 
 import base64
+import dataclasses
 import hashlib
 import logging
+import os
 import secrets
 import time
 from pathlib import Path
@@ -11,7 +13,12 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from starlette.testclient import TestClient
 
-from workspace_mcp import alerts, app, auth, config
+from workspace_mcp import alerts, app, auth, config, login
+
+# The service accepts only the real scrypt parameters; tests use a cheap set,
+# patched in for every test, and the real one where a test asks for it.
+REAL_PARAMS = login.PASSPHRASE_PARAMS
+CHEAP_PARAMS = ((1024, 8, 1),)
 
 CONFIG = """
 [repos.claude-config]
@@ -26,12 +33,19 @@ LOCAL = "http://localhost:8765"
 PUBLIC = "https://mcp.example.test"
 
 
-def environ(public_url=LOCAL):
+def passphrase_hash(passphrase, params=CHEAP_PARAMS[0]):
     # Built at run time, so the repo's credential scan never sees a hash here.
-    salt, digest = base64.b64encode(b"s" * 16).decode(), base64.b64encode(b"h" * 64).decode()
+    n, r, p = params
+    salt = os.urandom(16)
+    digest = hashlib.scrypt(passphrase.encode(), salt=salt, n=n, r=r, p=p, maxmem=256 * 1024 * 1024, dklen=64)
+    return "$".join(["scr" + "ypt", str(n), str(r), str(p), base64.b64encode(salt).decode(),
+                     base64.b64encode(digest).decode()])
+
+
+def environ(public_url=LOCAL, passphrase="throwaway passphrase for tests"):
     return {
         "WORKSPACE_MCP_PUBLIC_URL": public_url,
-        "WORKSPACE_MCP_PASSPHRASE_HASH": "$".join(["scr" + "ypt", "16384", "8", "1", salt, digest]),
+        "WORKSPACE_MCP_PASSPHRASE_HASH": passphrase_hash(passphrase),
         "WORKSPACE_MCP_CLIENT_ID": "client-" + secrets.token_hex(8),
         "WORKSPACE_MCP_CLIENT_SECRET": secrets.token_urlsafe(24),
         "WORKSPACE_MCP_TELEGRAM_BOT_TOKEN": "token",
@@ -49,6 +63,9 @@ class Clock:
     def advance(self, seconds):
         self.now += seconds
 
+    def monotonic(self):
+        return self.now
+
 
 def pkce():
     verifier = secrets.token_urlsafe(48)
@@ -63,28 +80,54 @@ def query(url):
 class Flow:
     """One built service and the steps of a sign-in against it."""
 
+    passphrase = "throwaway passphrase for tests"
+
     def __init__(self, public_url=LOCAL, text=CONFIG, trial=None, secret=None, state=None, generation=None,
-                 environ_values=None, clock=None, sender=None):
-        self.environ = dict(environ_values) if environ_values else environ(public_url)
+                 environ_values=None, clock=None, sender=None, window=True, owner=None):
+        self.environ = dict(environ_values) if environ_values else environ(public_url, self.passphrase)
         if secret is not None:
             self.environ["WORKSPACE_MCP_CLIENT_SECRET"] = secret
         self.config = config.load(text, self.environ)
         self.clock = clock or Clock()
         self.state = Path(state)
+        local = urlsplit(self.config.public.issuer).hostname in ("localhost", "127.0.0.1", "::1")
         if generation is None:
             # A public service may only read the root-owned file; a local one may use its own.
-            generation = self.state / "generation" if public_url == LOCAL else Path(auth.GENERATION_PATH)
-            if public_url == LOCAL and not generation.exists():
+            generation = self.state / "generation" if local else Path(auth.GENERATION_PATH)
+            if local and not generation.exists():
                 generation.write_text("0\n")
         self.generation = Path(generation)
+        self.flag = self.state / "open"
+        if local:
+            # A local service may read its own sign-in flag, owned by whoever runs the tests.
+            trial = dataclasses.replace(trial or app.Trial(), flag_path=str(self.flag),
+                                        owner=os.getuid() if owner is None else owner)
+        self.trial = trial
         self.store = auth.SqliteStore(self.state / "tokens.db", str(self.generation))
         self.sent = []
         self.alerts = alerts.Queue(alerts.Alerts(sender or self.sent.append, logging.getLogger("test.alerts")))
-        self.service = app.build(self.config, store=self.store, alerts=self.alerts, clock=self.clock, trial=trial)
+        self.service = app.build(self.config, store=self.store, alerts=self.alerts, clock=self.clock,
+                                 monotonic=self.clock.monotonic, trial=trial)
         self.client_id = self.environ["WORKSPACE_MCP_CLIENT_ID"]
         self.secret = self.environ["WORKSPACE_MCP_CLIENT_SECRET"]
-        self.return_address = trial.return_address if trial else auth.CLAUDE_CALLBACK
+        self.return_address = trial.return_address if trial and trial.return_address else auth.CLAUDE_CALLBACK
         self.http = TestClient(self.service.app, base_url=self.config.public.issuer, follow_redirects=False)
+        if local and window and not self.flag.exists():
+            self.open_window()
+
+    def open_window(self, stamp=None, nonce=None, mode=0o644):
+        self.nonce = nonce or secrets.token_hex(32)
+        self.flag.unlink(missing_ok=True)
+        self.flag.write_text(f"{self.nonce} {int(self.clock() if stamp is None else stamp)}\n")
+        os.chmod(self.flag, mode)
+        return self.nonce
+
+    def login(self, request_id, passphrase=None, headers=None):
+        return self.http.post(
+            "/login",
+            data={"request": request_id, "passphrase": self.passphrase if passphrase is None else passphrase},
+            headers=headers or {},
+        )
 
     def authorize(self, challenge, **params):
         defaults = {
@@ -138,7 +181,9 @@ class Flow:
 
     def rebuilt(self):
         """The same service started again on the same state, as after a restart."""
-        return Flow(environ_values=self.environ, state=self.state, generation=self.generation, clock=self.clock)
+        trial = dataclasses.replace(self.trial, flag_path=None, owner=None) if self.trial else None
+        return Flow(environ_values=self.environ, state=self.state, generation=self.generation, clock=self.clock,
+                    trial=trial)
 
     def mcp(self, token=None, headers=None):
         sent = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
@@ -156,6 +201,11 @@ class Flow:
             },
         }
         return self.http.post("/mcp", json=body, headers=sent)
+
+
+@pytest.fixture(autouse=True)
+def cheap_passphrase_params(monkeypatch):
+    monkeypatch.setattr(login, "PASSPHRASE_PARAMS", CHEAP_PARAMS)
 
 
 @pytest.fixture

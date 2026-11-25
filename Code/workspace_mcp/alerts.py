@@ -32,7 +32,13 @@ class AlertNotDelivered(Exception):
         super().__init__(f"alert not delivered ({self.reason})")
 
 
+# The window is opened by a command on the box, not from an address.
+FROM_SERVER = object()
+
+
 def address_text(address):
+    if address is FROM_SERVER:
+        return "the server"
     # A scoped IPv6 address carries free text after "%", so it is refused whole.
     if not isinstance(address, str) or "%" in address:
         return "unknown"

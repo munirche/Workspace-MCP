@@ -655,14 +655,22 @@ def test_a_local_trial_signs_in_to_its_own_address_only(make_flow):
     _not_found(trial, trial.authorize(challenge, redirect_uri=auth.CLAUDE_CALLBACK))
 
 
-def test_a_public_service_takes_its_address_in_any_case_or_with_the_default_port(make_flow, monkeypatch, tmp_path):
+def test_a_public_service_takes_its_https_address_in_any_case_or_with_port_443(make_flow):
     """Covers: R-6.11"""
-    generation = tmp_path / "generation"
-    generation.write_text("0\n")
-    monkeypatch.setattr(auth, "GENERATION_PATH", str(generation))
-    public = make_flow(public_url=PUBLIC, generation=generation)
-    for resource in ("https://MCP.example.test/mcp", "https://mcp.example.test:443/mcp"):
-        assert public.mcp(public.sign_in(resource=resource)["access_token"]).status_code == 200
+    provider = make_flow(public_url=PUBLIC).service.provider
+    for resource in (PUBLIC + "/mcp", "https://MCP.example.test/mcp", "https://mcp.example.test:443/mcp",
+                     PUBLIC + "/mcp/"):
+        assert provider._resource(resource) == PUBLIC + "/mcp"
+    for resource in ("http://mcp.example.test/mcp", "https://mcp.example.test:8443/mcp"):
+        with pytest.raises(Exception, match="itself only"):
+            provider._resource(resource)
+
+
+def test_the_service_takes_its_address_in_any_case_or_with_the_default_port(make_flow):
+    """Covers: R-6.11"""
+    portless = make_flow(public_url="http://localhost")
+    for resource in ("http://LOCALHOST/mcp", "http://localhost:80/mcp"):
+        assert portless.mcp(portless.sign_in(resource=resource)["access_token"]).status_code == 200
 
 
 def test_the_production_shape_publishes_its_https_address(make_flow):

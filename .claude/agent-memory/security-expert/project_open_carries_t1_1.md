@@ -160,6 +160,20 @@ Offered, check whether taken:
 - **T2.x:** `/etc/workspace-mcp` root-owned and 0755 is a checklist line, since the command trusts its folder.
 - **Tests:** a public-URL flow in `conftest.py` reads the real generation file (not a secret, never written), so the suite can differ between the box and CI once deployed.
 
+From T1.8 Review (2026-11-24, uncommitted on `t1.8-login`, nothing blocking; read `login.py`, `app.py` (SignInGate, WindowWatch), `scripts/hash_passphrase.py` and `test_login.py` before raising again, the fixes offered were Munir's to take or decline):
+
+What is guaranteed: a caller without the client id never reaches the window check on `/authorize`, so open and closed are one path for them; the flag is read through no link, must be a regular file of the expected owner with no group or world write, and parse strictly; closings, the attempt count and the generation at first sight live in the store by nonce; an attempt is reserved atomically before scrypt runs and one check runs at a time off the loop; a post is counted only with a live sign-in of this window, an absent or own Origin and a small form body; the page is built from configuration only; flag path and owner are trial fields, refused off loopback; the T1.7 advice on a repeating number landed (`highest` table).
+
+Accepted deviation (recorded in `memory.md`): no cap on pending sign-ins or on `state`; a new window purges older pending rows. My view: acceptable, because a pending row needs the configured client id, an open window and a request line the server already bounds. Revisit when: a second client exists, the client id is known beyond Munir and Claude, or T2.2 finds another process able to reach the socket.
+
+Offered, check whether taken:
+
+- **Two sign-ins in one window:** after the passphrase check nothing re-checked the window, so two posts carrying different pending ids could both be approved; the concurrency test used one id and passed because the pending row is taken once. Advised: close the window first and approve only if that close changed a row; a two-id test.
+- **Helper:** refuse a passphrase with leading or trailing whitespace (a paste artefact burns attempts at the first sign-in).
+- **Tests:** no alert test for a wrong passphrase or a sign-in naming the forwarded address; `_closed` probes `/login` without a live id, so it cannot tell open from closed there.
+- **T1.10:** uvicorn `lifespan="on"`, or a failed start-up leaves the service running with no window watch.
+- **T2.x:** `workspace-mcp-signin` writes by temp file and rename, 0644, random nonce, in a root-owned 0755 folder; its path pinned equal to `login.FLAG_PATH`.
+
 Currency (searched 2026-11-24): no advisory found against the server side of mcp 2.3.0; GHSA-qx49-fqc8-xw99 (2026-09-28) is client-side discovery, fixed in 2.2.0. OWASP's scrypt floor read the same day: N=2^17, r=8, p=1.
 
 Related: [[supply-chain-decisions]]

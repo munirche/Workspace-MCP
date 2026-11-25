@@ -40,6 +40,12 @@ def _refused(response):
     assert "access_token" not in body
 
 
+def _reuse_alerts(flow):
+    # The window-opened alert the running service sends is not counted here.
+    flow.alerts.join()
+    return [text for text in flow.sent if "retired refresh token" in text]
+
+
 def _works(flow, tokens):
     return flow.mcp(tokens["access_token"]).status_code == 200
 
@@ -130,8 +136,7 @@ def test_a_retired_token_used_within_sixty_seconds_gets_a_further_pair(flow):
     # another sixty seconds it rotates normally.
     flow.clock.advance(61)
     assert flow.refresh(replacement["refresh_token"]).status_code == 200
-    flow.alerts.join()
-    assert flow.sent == []
+    assert _reuse_alerts(flow) == []
 
 
 def test_a_retired_token_used_with_the_clock_stepped_back_is_refused_without_cancelling(flow):
@@ -140,8 +145,7 @@ def test_a_retired_token_used_with_the_clock_stepped_back_is_refused_without_can
     second = _rotated(flow, first["refresh_token"])
     flow.clock.advance(-120)
     _refused(flow.refresh(first["refresh_token"]))
-    flow.alerts.join()
-    assert flow.sent == []
+    assert _reuse_alerts(flow) == []
     flow.clock.advance(120)
     assert _works(flow, second)
 
@@ -171,8 +175,7 @@ def test_two_uses_of_one_live_token_side_by_side_both_succeed(flow):
     for pair in issued:
         assert flow.mcp(pair.access_token).status_code == 200
         assert flow.refresh(pair.refresh_token).status_code == 200
-    flow.alerts.join()
-    assert flow.sent == []
+    assert _reuse_alerts(flow) == []
 
 
 def test_a_retired_token_used_after_sixty_seconds_cancels_the_sign_in_and_alerts(flow):
@@ -199,10 +202,10 @@ def test_a_retired_token_used_after_sixty_seconds_cancels_the_sign_in_and_alerts
         _refused(flow.refresh(pair["refresh_token"]))
     assert _works(flow, other)
     assert flow.refresh(other["refresh_token"]).status_code == 200
-    flow.alerts.join()
-    assert len(flow.sent) == 1
-    assert "a retired refresh token was used after its grace period" in flow.sent[0]
-    assert "from 203.0.113.9" in flow.sent[0]
+    sent = _reuse_alerts(flow)
+    assert len(sent) == 1
+    assert "a retired refresh token was used after its grace period" in sent[0]
+    assert "from 203.0.113.9" in sent[0]
 
 
 @pytest.mark.parametrize(
@@ -231,9 +234,9 @@ def test_a_reuse_alert_names_the_address_only_when_nginx_gave_exactly_one(flow, 
         headers=headers,
     )
     _refused(response)
-    flow.alerts.join()
-    assert len(flow.sent) == 1
-    assert flow.sent[0].endswith("from unknown.")
+    sent = _reuse_alerts(flow)
+    assert len(sent) == 1
+    assert sent[0].endswith("from unknown.")
 
 
 def test_a_reuse_that_also_drops_the_scope_still_cancels_the_sign_in(flow):
@@ -243,8 +246,7 @@ def test_a_reuse_that_also_drops_the_scope_still_cancels_the_sign_in(flow):
     flow.clock.advance(61)
     _refused(flow.refresh(first["refresh_token"], scope="offline_access"))
     assert flow.mcp(second["access_token"]).status_code == 401
-    flow.alerts.join()
-    assert len(flow.sent) == 1
+    assert len(_reuse_alerts(flow)) == 1
 
 
 def test_a_live_token_that_drops_the_scope_is_refused_and_stays_live(flow):
@@ -267,8 +269,7 @@ def test_a_refresh_token_expired_by_the_real_clock_is_refused_by_the_sdk_without
     response = flow.refresh("old-refresh")
     _refused(response)
     assert response.json()["error_description"] == "refresh token has expired"
-    flow.alerts.join()
-    assert flow.sent == []
+    assert _reuse_alerts(flow) == []
 
 
 def test_an_alert_that_cannot_be_sent_does_not_change_the_answer(make_flow):
@@ -339,7 +340,7 @@ def test_a_dead_refresh_token_is_told_to_sign_in_again_and_nothing_else(flow, ca
         _rotated(flow, token)
         flow.clock.advance(61)
         flow.refresh(token)
-        flow.alerts.join()
+        _reuse_alerts(flow)
         flow.sent.clear()
     elif case == "unknown":
         token = "x" * 43
@@ -349,8 +350,7 @@ def test_a_dead_refresh_token_is_told_to_sign_in_again_and_nothing_else(flow, ca
         _rotated(flow, token)
         flow.clock.advance(30 * DAY)
     _refused(flow.refresh(token))
-    flow.alerts.join()
-    assert flow.sent == []
+    assert _reuse_alerts(flow) == []
 
 
 def test_tokens_codes_and_sign_ins_are_stored_only_as_hashes(flow):
@@ -387,8 +387,8 @@ def test_cancel_all_stops_every_token_code_and_sign_in_issued_before_it(flow):
     code = flow.code(code_challenge)
     _, pending_challenge = pkce()
     pending = flow.request_id(flow.authorize(pending_challenge))
-    flag = flow.state / "open"
-    flag.write_text("flag\n")
+    flag = flow.flag
+    assert flag.exists()
     printed = _revoke_module().revoke(str(flow.generation), str(flag))
     assert printed >= int(time.time()) - 5
     assert flow.generation.read_text() == f"{printed}\n"
@@ -397,6 +397,7 @@ def test_cancel_all_stops_every_token_code_and_sign_in_issued_before_it(flow):
     _refused(flow.refresh(tokens["refresh_token"]))
     assert flow.exchange(code, code_verifier).json()["error"] == "invalid_grant"
     assert flow.service.provider.approve(pending) is None
+    flow.open_window()
     assert _works(flow, flow.sign_in())
 
 
@@ -411,9 +412,7 @@ def test_without_a_readable_cancel_all_number_nothing_is_accepted(flow, content)
     assert flow.mcp(tokens["access_token"]).status_code == 401
     _refused(flow.refresh(tokens["refresh_token"]))
     _, challenge = pkce()
-    response = flow.authorize(challenge)
-    assert response.status_code == 302
-    assert query(response.headers["location"])["error"] == "temporarily_unavailable"
+    assert flow.authorize(challenge).status_code == 404
 
 
 def test_a_pipe_in_place_of_the_cancel_all_number_is_refused_without_waiting(flow, tmp_path):
@@ -498,6 +497,7 @@ def test_the_cancel_all_command_says_so_when_the_window_could_not_be_closed(tmp_
 def test_a_cancel_all_number_that_goes_back_does_not_revive_anything(flow):
     """Covers: R-6.9"""
     flow.generation.write_text("5\n")
+    flow.open_window()
     tokens = flow.sign_in()
     flow.generation.write_text("6\n")
     assert flow.mcp(tokens["access_token"]).status_code == 401
@@ -505,7 +505,7 @@ def test_a_cancel_all_number_that_goes_back_does_not_revive_anything(flow):
     assert flow.mcp(tokens["access_token"]).status_code == 401
     _refused(flow.refresh(tokens["refresh_token"]))
     _, challenge = pkce()
-    assert query(flow.authorize(challenge).headers["location"])["error"] == "temporarily_unavailable"
+    assert flow.authorize(challenge).status_code == 404
     again = flow.rebuilt()
     with again.http:
         assert again.mcp(tokens["access_token"]).status_code == 401
