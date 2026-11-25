@@ -113,7 +113,7 @@ There is no sign-in page unless Munir has opened one, and only the one configure
 - R-5.2 WHEN Munir opens the sign-in window from the server THE SYSTEM SHALL accept sign-ins for ten minutes and then close the window.
 - R-5.3 WHEN a sign-in succeeds THE SYSTEM SHALL close the sign-in window.
 - R-5.4 WHEN five wrong passphrases have been entered since the window opened THE SYSTEM SHALL close the sign-in window.
-- R-5.5 WHEN the sign-in page is shown THE SYSTEM SHALL name on it the client asking for access and the address the browser will be sent back to.
+- R-5.5 WHEN the sign-in page is shown THE SYSTEM SHALL name on it, by a fixed label, the client asking for access, and the address the browser will be sent back to.
 - R-5.6 THE SYSTEM SHALL hold the passphrase only as a one-way hash that is slow to guess, never the passphrase itself.
 - R-5.7 IF the passphrase given to the hashing helper is shorter than twenty characters THEN the helper SHALL refuse it.
 - R-5.8 IF a sign-in is started with a client identifier other than the configured one, or a return address other than that client's own, THEN THE SYSTEM SHALL refuse it without showing the sign-in page, without sending the browser anywhere, and without repeating what the request sent.
@@ -151,7 +151,7 @@ There is no sign-in page unless Munir has opened one, and only the one configure
 
 ### R-8 Alerts and records
 
-- R-8.1 WHEN the sign-in window is opened, a sign-in succeeds, a wrong passphrase is entered, or a retired refresh token is used after its grace period THE SYSTEM SHALL send Munir an alert naming the event, the time and the address it came from.
+- R-8.1 WHEN the sign-in window is opened, a sign-in succeeds, a wrong passphrase is entered, or a retired refresh token is used after its grace period THE SYSTEM SHALL send Munir an alert naming the event, the time and the address it came from (for the window's opening, the server itself).
 - R-8.2 IF an alert cannot be delivered THEN THE SYSTEM SHALL record the failure and SHALL carry on with what it was doing.
 - R-8.3 THE SYSTEM SHALL never put a passphrase, a token, a secret or file content into an alert or a log record.
 - R-8.4 WHEN a tool is called THE SYSTEM SHALL record the user, the tool, the repo, the path and the address the call came from.
@@ -233,7 +233,7 @@ Resolved 2026-11-11 by Munir: a note edited from the phone gains the first line 
 
 Changed 2026-11-12 by Munir, at the Clarify gate of T1.2, T1.3, T1.5 and T1.9: R-9.1 gains the service's public address, which no criterion covered although the sign-in metadata and the Host check are built from it; R-3.10 is new, because a live repo's own settings can point version control at files outside the repo, which R-3.9 (programs only) does not cover.
 
-Changed 2026-11-24 by Munir, at the Clarify gate of T1.6, T1.7, T1.8 and T1.10: R-5.8 names the client's own return address (Claude's, fixed in code; a local trial alone may use one exact loopback address, Plan D-4) and says the refusal repeats nothing the request sent; R-6.7 says a sign-in belongs to the one configured user (D-12), so the service refuses to start with any other number; R-6.4 leaves an expired token, or one of a sign-in already cancelled, to R-6.5 alone, with no second alert; R-6.9 also ends codes and unfinished sign-ins and closes the window; R-6.5 applies once the client has given its identifier and secret, since a refresh without them is R-6.13's `invalid_client`.
+Changed 2026-11-24 by Munir, at the Clarify gate of T1.6, T1.7, T1.8 and T1.10: R-5.8 names the client's own return address (Claude's, fixed in code; a local trial alone may use one exact loopback address, Plan D-4) and says the refusal repeats nothing the request sent; R-6.7 says a sign-in belongs to the one configured user (D-12), so the service refuses to start with any other number; R-6.4 leaves an expired token, or one of a sign-in already cancelled, to R-6.5 alone, with no second alert; R-6.9 also ends codes and unfinished sign-ins and closes the window; R-5.5 names the client by a fixed label, not its identifier; R-8.1's window alert comes from the server, where the window is opened; R-6.5 applies once the client has given its identifier and secret, since a refresh without them is R-6.13's `invalid_client`.
 
 ## Completeness checklist
 

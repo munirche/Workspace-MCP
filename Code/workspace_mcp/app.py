@@ -1,9 +1,12 @@
 """Assembles the service: the SDK's app and the layers in front of it."""
 
+import asyncio
 import base64
+import contextlib
 import binascii
 import hmac
 import json
+import logging
 import re
 import time
 from dataclasses import dataclass
@@ -14,7 +17,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import DEFAULT_MAX_REQUEST_BODY_SIZE, TransportSecuritySettings
 from starlette.responses import PlainTextResponse, Response
 
-from workspace_mcp import auth
+from workspace_mcp import auth, login
 from workspace_mcp.config import ConfigError
 
 TRIAL_RETURN = re.compile(r"http://(localhost|127\.0\.0\.1):[0-9]{1,5}/[A-Za-z0-9._~/-]*")
@@ -27,6 +30,8 @@ class Trial:
     """What only a local trial may change; refused unless the service is on loopback."""
 
     return_address: str | None = None
+    flag_path: str | None = None
+    owner: int | None = None
 
 
 @dataclass(frozen=True)
@@ -34,20 +39,29 @@ class Service:
     app: object
     provider: auth.Provider
     server: MCPServer
+    window: login.Window
 
 
-def build(config, *, store, alerts, clock=time.time, trial=None):
+def build(config, *, store, alerts, clock=time.time, monotonic=time.monotonic, trial=None):
     if len(config.users) != 1:
         raise ConfigError(f"sign-in serves one user; the configuration names {len(config.users)}")
     (user,) = config.users
     if trial is not None or store.generation_path != auth.GENERATION_PATH:
         _check_trial(config, trial or Trial())
-    if trial is not None and trial.return_address is not None:
+    trial = trial or Trial()
+    passphrase_hash = login.check_hash(config.secrets.passphrase_hash)
+    if trial.return_address is not None:
         return_address, label = trial.return_address, auth.TRIAL_LABEL
     else:
         return_address, label = auth.CLAUDE_CALLBACK, auth.LABEL
     client = auth.Client(config.secrets.client_id.reveal(), config.secrets.client_secret, return_address, label)
-    provider = auth.Provider(client, user, config.public, store, alerts, clock)
+    window = login.Window(
+        store, alerts, clock, monotonic,
+        flag_path=trial.flag_path or login.FLAG_PATH,
+        owner=0 if trial.owner is None else trial.owner,
+    )
+    provider = auth.Provider(client, user, config.public, store, alerts, clock, window)
+    page = login.Page(provider, store, window, client, config.public.issuer, passphrase_hash, alerts, clock)
     server = MCPServer(
         "Workspace-MCP",
         auth_server_provider=provider,
@@ -68,9 +82,8 @@ def build(config, *, store, alerts, clock=time.time, trial=None):
             allowed_origins=[],
         ),
     )
-    return Service(
-        app=CallerAddress(TokenForm(AuthorizeGuard(inner, client), client)), provider=provider, server=server
-    )
+    app = CallerAddress(WindowWatch(TokenForm(SignInGate(inner, client, window, page), client), window))
+    return Service(app=app, provider=provider, server=server, window=window)
 
 
 def _check_trial(config, trial):
@@ -103,20 +116,47 @@ def _not_found():
     return PlainTextResponse("Not Found", status_code=404)
 
 
-class AuthorizeGuard:
-    """Refuses another client or return address before the SDK, whose refusal echoes the value."""
+class WindowWatch:
+    """Watches the sign-in window for as long as the service runs."""
 
-    def __init__(self, app, client):
+    def __init__(self, app, window):
         self._app = app
-        self._client = client
+        self._window = window
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and scope["path"] in ("/authorize", "/authorize/"):
-            if not self._acceptable(scope):
+        if scope["type"] != "lifespan":
+            return await self._app(scope, receive, send)
+        task = asyncio.create_task(login.watch(self._window, logging.getLogger("workspace_mcp")))
+        try:
+            await self._app(scope, receive, send)
+        finally:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+
+class SignInGate:
+    """Answers the sign-in paths as an unknown path unless the window is open and the request is the client's."""
+
+    # The SDK's own refusal of another client or return address echoes the value.
+
+    def __init__(self, app, client, window, page):
+        self._app = app
+        self._client = client
+        self._window = window
+        self._page = page
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["path"] in ("/authorize", "/authorize/", "/login", "/login/"):
+            if not self._acceptable(scope) or self._window.current() is None:
                 return await _not_found()(scope, receive, send)
+            if scope["path"] == "/login":
+                return await self._page(scope, receive, send)
         await self._app(scope, receive, send)
 
     def _acceptable(self, scope):
+        if scope["path"] == "/login":
+            return scope["method"] in ("GET", "POST")
         if scope["path"] != "/authorize" or scope["method"] != "GET":
             return False
         # Parsed as Starlette parses the query the SDK then reads.
@@ -142,7 +182,7 @@ class TokenForm:
         basic = [value for name, value in headers if name == b"authorization" and value[:6].lower() == b"basic "]
         if not basic:
             return await self._app(scope, receive, send)
-        body = await _body(headers, receive, BODY_LIMIT)
+        body = await login.read_body(headers, receive, BODY_LIMIT)
         if body is None:
             return await Response("Request body too large", status_code=413)(scope, receive, send)
         form = _merged(basic, headers, body, self._client)
@@ -188,24 +228,6 @@ def _decoded(raw, expected):
         if hmac.compare_digest(candidate.encode(), expected.encode()):
             matched = candidate
     return matched
-
-
-async def _body(headers, receive, limit):
-    declared = [value for name, value in headers if name == b"content-length"]
-    if declared and (not declared[0].isdigit() or int(declared[0]) > limit):
-        return None
-    chunks, size = [], 0
-    while True:
-        message = await receive()
-        if message["type"] != "http.request":
-            return None
-        chunk = message.get("body", b"")
-        size += len(chunk)
-        if size > limit:
-            return None
-        chunks.append(chunk)
-        if not message.get("more_body", False):
-            return b"".join(chunks)
 
 
 def _replay(body, receive):

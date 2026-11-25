@@ -2,7 +2,7 @@
 
 ## Current State
 
-**As of 2026-11-24.** Phase 1 is under way; eight of its eleven tasks are
+**As of 2026-11-24.** Phase 1 is under way; nine of its eleven tasks are
 built, not yet run as one service. T1.1 pinned `mcp` 2.3.0 and its
 dependencies by hash and tried the SDK ("The SDK, as Tried"). T1.2: the repo
 checks itself (no tracked credential, deny-only assistant settings, the lock
@@ -14,17 +14,15 @@ calls, and cuts the SDK's own log records to fixed sentences. T1.5: `git.py`,
 the one place git runs. T1.4: `paths.py` decides which repos a user may read
 and refuses any other name with the one answer a missing repo gets;
 `list_repos` gives names and whether each is writable. T1.6: `auth.py` and
-`app.py` start and finish a sign-in for the one client (D-4): Claude's
-callback fixed in code, S256 only, no registration, the service's own
-address and `workspace` on every token (D-8), a code used once, the client's
-secret taken in the form or a Basic header, and another client or return
-address refused with a plain 404. T1.7: tokens kept hashed in SQLite with
-rotation, the 60-second grace and reuse detection, surviving a restart, and
-`workspace-mcp-revoke-all` cancelling everything issued before it (D-4).
-Munir approved phases 1–2 in `Tasks.md` (rev 2, 2026-11-12); phases 3–5 are
-draft.
-**Next:** T1.8 (window, page, passphrase), T1.10 (the service assembled),
-then T1.11's local trial, built in one session from the plan Munir approved
+`app.py` start and finish a sign-in for the one client (D-4). T1.7: tokens
+kept hashed in SQLite with rotation, the 60-second grace and reuse
+detection, and `workspace-mcp-revoke-all` (D-4). T1.8: `login.py`, the
+sign-in window read from root's flag, the page, the passphrase check and
+`scripts/hash_passphrase.py` (D-4). Munir approved phases 1–2 in `Tasks.md`
+(rev 2, 2026-11-12); phases 3–5 are draft.
+**Next:** T1.10 (the service assembled: host check, tool declarations,
+result size, plain refusals, logging, `python -m workspace_mcp`), then
+T1.11's local trial, built in one session from the plan Munir approved
 2026-11-24 after both experts' review.
 **Watch:** sessions on the box cannot `sudo`, so every deploy step is Munir's,
 from `deploy/DEPLOY.md`. Claude never sees a real secret: the local trial uses
@@ -192,14 +190,39 @@ no-framing policy, so the sign-in page cannot be embedded in another site.
   public sign-in page to brute-force, no fail2ban jail and no lockout that
   a stranger could hold against him, and a sign-in link sent by someone
   else leads nowhere unless he opened the window himself. Cost accepted:
-  signing in needs SSH at hand, a few times a year (see tokens).
+  signing in needs SSH at hand, a few times a year (see tokens). The flag is
+  `/run/workspace-mcp-signin/open` (folder and file root-owned, outside the
+  service's own folders; a reboot clears it), holding a random nonce and the
+  opening time. The service reads it without following a link, requires
+  owner root and no group or world write, and decides the ten minutes itself:
+  from the stamp, and again from when it first saw the nonce, so stamping
+  the flag again does not extend it. Each closing is kept in the store by
+  nonce, so a restart cannot reopen it; a cancel-all since first sight closes
+  it too, and a new window ends every sign-in an older one started. A
+  passphrase post is counted only for a sign-in this window started, so a
+  stranger cannot spend the five attempts, and each attempt is reserved
+  before the check, so posts at once cannot start more than five. The page
+  names the client by a fixed label ("the Claude app") and its return
+  address, refills nothing, and is sent with `Referrer-Policy: same-origin`:
+  `no-referrer` would make the browser post `Origin: null`, which the page
+  refuses as it refuses any other site's `Origin`. The service polls the
+  flag every 2 seconds, so the window-opened alert ("from the server")
+  arrives at once (T1.8). `workspace-mcp-signin open` (T2.1) writes the flag
+  by temp file and rename, mode 0644, with a fresh random nonce, in its
+  root-owned 0755 folder, and a test pins its path to the service's.
 - *Passphrase.* Bitwarden-generated, made only for this server, stored as a
   scrypt hash (Python standard library) written
   `scrypt$<n>$<r>$<p>$<salt>$<hash>` (n, r and p in decimal; salt and
   hash in standard base64 with padding, at least 16 and 32 characters
   long), so the
   repo's credential scan can recognise one (R-9.3); `hash_passphrase.py`
-  refuses anything under 20 characters. Compared in constant time.
+  refuses anything under 20 characters. Compared in constant time. The one
+  accepted setting is N=2^17, r=8, p=1 (OWASP's floor, read 2026-11-24),
+  fixed in code: a hash with any other stops the service at start-up, by
+  name. Each check takes 128 MiB, so one runs at a time, off the request
+  loop. `scripts/hash_passphrase.py` takes no arguments, runs only in a
+  terminal, asks twice, and prints the hash: Munir runs it in his own
+  terminal, never in a session (T1.8).
 - *Tokens.* Random, stored hashed with their user id. Access 1 hour.
   Refresh 30 days, sliding: each use rotates it and starts 30 new days, so
   regular use never signs him out, and 30 idle days do. A refresh token
@@ -1158,6 +1181,14 @@ characters per result, and GitHub's free plan, which has no branch protection.
   `/token` CORS preflight refuses before the service's own layer runs, so the
   trial build allows that header (trial only), or Inspector runs through its
   proxy.
+- **A second tap on "Sign in"** (Munir to decide). Two right passphrases for
+  one sign-in give one sign-in: the first post closes the window and issues
+  the code; the second answers 404. A browser that submits twice shows the
+  second answer, so the 303 to Claude is lost and the window must be opened
+  again. Failing closed was kept; the alternative is to answer a second right
+  post for the same sign-in, within a few seconds, with a fresh single-use
+  code, which means the page answers briefly after its window closed. Until
+  decided: tap once (DEPLOY.md, T1.11).
 - **The caller's address on a socket** (for T1.10). Over a Unix socket
   uvicorn has no client address and ignores nginx's `X-Forwarded-For` unless
   told to trust every sender, which leans on the socket folder's mode. T1.10

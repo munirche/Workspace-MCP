@@ -45,7 +45,10 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS pending (
     hash TEXT PRIMARY KEY, client TEXT NOT NULL, redirect_uri TEXT NOT NULL, explicit INTEGER NOT NULL,
     challenge TEXT NOT NULL, resource TEXT NOT NULL, scopes TEXT NOT NULL, state TEXT,
-    generation INTEGER NOT NULL);
+    generation INTEGER NOT NULL, window TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS windows (
+    nonce TEXT PRIMARY KEY, generation INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+    closed_at REAL, reason TEXT, alerted INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS codes (
     hash TEXT PRIMARY KEY, user TEXT NOT NULL, client TEXT NOT NULL, redirect_uri TEXT NOT NULL,
     explicit INTEGER NOT NULL, challenge TEXT NOT NULL, resource TEXT NOT NULL, scopes TEXT NOT NULL,
@@ -99,6 +102,14 @@ class Pending:
     scopes: tuple[str, ...]
     state: str | None
     generation: int
+    window: str
+
+
+@dataclass(frozen=True)
+class SignInWindow:
+    generation: int
+    attempts: int
+    closed: bool
 
 
 @dataclass(frozen=True)
@@ -201,25 +212,54 @@ class SqliteStore:
 
     def put_pending(self, request_id, pending):
         with self._transaction() as db:
+            # A sign-in started in a new window ends every one an earlier window started.
+            db.execute("DELETE FROM pending WHERE window != ?", (pending.window,))
             db.execute(
-                "INSERT INTO pending VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO pending VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (_digest(request_id), pending.client_id, pending.redirect_uri, pending.explicit, pending.challenge,
-                 pending.resource, " ".join(pending.scopes), pending.state, pending.generation),
+                 pending.resource, " ".join(pending.scopes), pending.state, pending.generation, pending.window),
             )
+
+    def pending(self, request_id):
+        return _pending(self._one(f"SELECT {PENDING} FROM pending WHERE hash = ?", _digest(request_id)))
 
     def take_pending(self, request_id):
         with self._transaction() as db:
-            row = db.execute(
-                "SELECT client, redirect_uri, explicit, challenge, resource, scopes, state, generation"
-                " FROM pending WHERE hash = ?",
-                (_digest(request_id),),
-            ).fetchone()
+            row = db.execute(f"SELECT {PENDING} FROM pending WHERE hash = ?", (_digest(request_id),)).fetchone()
             db.execute("DELETE FROM pending WHERE hash = ?", (_digest(request_id),))
-        if row is None:
-            return None
-        client, redirect_uri, explicit, challenge, resource, scopes, state, generation = row
-        return Pending(client, redirect_uri, bool(explicit), challenge, resource, tuple(scopes.split()), state,
-                       generation)
+        return _pending(row)
+
+    def see_window(self, nonce, generation):
+        """The window's row, made at first sight with the number current then."""
+        if self.window(nonce) is None:
+            with self._transaction() as db:
+                db.execute("INSERT OR IGNORE INTO windows (nonce, generation) VALUES (?, ?)", (nonce, generation))
+        return self.window(nonce)
+
+    def window(self, nonce):
+        row = self._one("SELECT generation, attempts, closed_at FROM windows WHERE nonce = ?", nonce)
+        return None if row is None else SignInWindow(row[0], row[1], row[2] is not None)
+
+    def reserve_attempt(self, nonce, limit):
+        with self._transaction() as db:
+            cursor = db.execute(
+                "UPDATE windows SET attempts = attempts + 1 WHERE nonce = ? AND closed_at IS NULL AND attempts < ?",
+                (nonce, limit),
+            )
+            return cursor.rowcount == 1
+
+    def close_window(self, nonce, reason, now):
+        """Closes the window; True only for the one call that closed it."""
+        with self._transaction() as db:
+            cursor = db.execute(
+                "UPDATE windows SET closed_at = ?, reason = ? WHERE nonce = ? AND closed_at IS NULL",
+                (now, reason, nonce),
+            )
+            return cursor.rowcount == 1
+
+    def mark_alerted(self, nonce):
+        with self._transaction() as db:
+            return db.execute("UPDATE windows SET alerted = 1 WHERE nonce = ? AND alerted = 0", (nonce,)).rowcount == 1
 
     def put_code(self, code, record):
         with self._transaction() as db:
@@ -308,6 +348,17 @@ def _add_pair(db, chain, now, access, refresh):
     )
 
 
+PENDING = "client, redirect_uri, explicit, challenge, resource, scopes, state, generation, window"
+
+
+def _pending(row):
+    if row is None:
+        return None
+    client, redirect_uri, explicit, challenge, resource, scopes, state, generation, window = row
+    return Pending(client, redirect_uri, bool(explicit), challenge, resource, tuple(scopes.split()), state,
+                   generation, window)
+
+
 def _code(row):
     user, client, redirect_uri, explicit, challenge, resource, scopes, generation, expires_at = row
     return Code(user, client, redirect_uri, bool(explicit), challenge, resource, tuple(scopes.split()), generation,
@@ -323,7 +374,8 @@ def _grant(row):
 class Provider:
     """The SDK's authorization-server interface, for the one client and the one user."""
 
-    def __init__(self, client, user, public, store, alerts, clock):
+    def __init__(self, client, user, public, store, alerts, clock, window):
+        self._window = window
         self._client = client
         self._record = client.record()
         self._user = user
@@ -339,7 +391,8 @@ class Provider:
         if not CHALLENGE.fullmatch(params.code_challenge):
             raise AuthorizeError("invalid_request", "The sign-in needs an S256 code challenge.")
         generation = self._store.generation()
-        if generation is None:
+        window = self._window.current()
+        if generation is None or window is None:
             raise AuthorizeError("temporarily_unavailable", "Sign-in is unavailable.")
         request_id = secrets.token_urlsafe(32)
         self._store.put_pending(
@@ -353,6 +406,7 @@ class Provider:
                 scopes=_granted(params.scopes),
                 state=params.state,
                 generation=generation,
+                window=window,
             ),
         )
         return f"{self._public.issuer}/login?request={request_id}"
