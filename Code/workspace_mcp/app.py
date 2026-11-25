@@ -25,6 +25,7 @@ from workspace_mcp.config import NAME, ConfigError
 from workspace_mcp.paths import RepoMissing
 
 TRIAL_RETURN = re.compile(r"http://(localhost|127\.0\.0\.1):[0-9]{1,5}/[A-Za-z0-9._~/-]*")
+TRIAL_ORIGIN = re.compile(r"http://(localhost|127\.0\.0\.1):[0-9]{1,5}")
 FORM = b"application/x-www-form-urlencoded"
 BODY_LIMIT = DEFAULT_MAX_REQUEST_BODY_SIZE
 LOGGER = logging.getLogger("workspace_mcp")
@@ -39,6 +40,8 @@ class Trial:
     return_address: str | None = None
     flag_path: str | None = None
     owner: int | None = None
+    # MCP Inspector in a browser: its one origin, allowed on /mcp and /token.
+    origin: str | None = None
 
 
 @dataclass(frozen=True)
@@ -87,11 +90,13 @@ def build(config, *, store, alerts, clock=time.time, monotonic=time.monotonic, t
         json_response=True,
         transport_security=TransportSecuritySettings(
             allowed_hosts=[config.public.allowed_host],
-            allowed_origins=[],
+            allowed_origins=[trial.origin] if trial.origin else [],
         ),
     )
     _add_tools(server, config)
     app = CallerAddress(WindowWatch(TokenForm(SignInGate(inner, client, window, page), client), window))
+    if trial.origin:
+        app = TrialCors(app, trial.origin)
     app = Shield(HostGate(app, config.public.allowed_host))
     return Service(app=app, provider=provider, server=server, window=window)
 
@@ -193,6 +198,43 @@ def _check_trial(config, trial):
         raise ConfigError("trial settings are refused unless the service runs on the local machine")
     if trial.return_address is not None and not TRIAL_RETURN.fullmatch(trial.return_address):
         raise ConfigError("the trial return address must be one exact http://localhost:<port>/<path> address")
+    if trial.origin is not None and not TRIAL_ORIGIN.fullmatch(trial.origin):
+        raise ConfigError("the trial origin must be one exact http://localhost:<port> origin")
+
+
+class TrialCors:
+    """Answers MCP Inspector's browser preflights and marks its responses readable, for its one origin."""
+
+    # The SDK's own /token preflight allows no Authorization header, which a
+    # browser client sending its secret by Basic needs.
+    ALLOW_HEADERS = b"authorization, content-type, mcp-protocol-version, mcp-session-id, mcp-method, mcp-name"
+    EXPOSE_HEADERS = b"www-authenticate, mcp-session-id, mcp-protocol-version"
+
+    def __init__(self, app, origin):
+        self._app = app
+        self._origin = origin.encode()
+
+    async def __call__(self, scope, receive, send):
+        origins = [value for name, value in scope.get("headers", []) if name == b"origin"]
+        if scope["type"] != "http" or origins != [self._origin] or scope["path"] not in ("/mcp", "/token"):
+            return await self._app(scope, receive, send)
+        if scope["method"] == "OPTIONS":
+            headers = {"Access-Control-Allow-Origin": self._origin.decode(),
+                       "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+                       "Access-Control-Allow-Headers": self.ALLOW_HEADERS.decode(),
+                       "Access-Control-Max-Age": "600"}
+            return await Response(status_code=204, headers=headers)(scope, receive, send)
+
+        async def readable(message):
+            if message["type"] == "http.response.start":
+                kept = [(name, value) for name, value in message.get("headers", [])
+                        if name.lower() not in (b"access-control-allow-origin", b"access-control-expose-headers")]
+                kept += [(b"access-control-allow-origin", self._origin),
+                         (b"access-control-expose-headers", self.EXPOSE_HEADERS)]
+                message = dict(message, headers=kept)
+            await send(message)
+
+        await self._app(scope, receive, readable)
 
 
 class Shield:
