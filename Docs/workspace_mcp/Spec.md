@@ -116,7 +116,7 @@ There is no sign-in page unless Munir has opened one, and only the one configure
 - R-5.5 WHEN the sign-in page is shown THE SYSTEM SHALL name on it the client asking for access and the address the browser will be sent back to.
 - R-5.6 THE SYSTEM SHALL hold the passphrase only as a one-way hash that is slow to guess, never the passphrase itself.
 - R-5.7 IF the passphrase given to the hashing helper is shorter than twenty characters THEN the helper SHALL refuse it.
-- R-5.8 IF a sign-in is started with a client identifier or a return address other than the one configured THEN THE SYSTEM SHALL refuse it without showing the sign-in page and without sending the browser anywhere.
+- R-5.8 IF a sign-in is started with a client identifier other than the configured one, or a return address other than that client's own, THEN THE SYSTEM SHALL refuse it without showing the sign-in page, without sending the browser anywhere, and without repeating what the request sent.
 - R-5.9 THE SYSTEM SHALL offer no way for a client to register itself and SHALL name no registration address in what it publishes about how to sign in.
 - R-5.10 IF a sign-in is started without the client's proof-key challenge in its strong form (S256) THEN THE SYSTEM SHALL refuse it, and THE SYSTEM SHALL publish that form as the only one it supports.
 - R-5.11 THE SYSTEM SHALL serve every page with instructions to the browser to use encrypted connections only and never to show the page inside another site. [MANUAL]
@@ -127,9 +127,9 @@ There is no sign-in page unless Munir has opened one, and only the one configure
 - R-6.2 WHEN a valid refresh token is used THE SYSTEM SHALL issue a new access token and a new refresh token whose thirty days start at that moment, and SHALL retire the one used and every other refresh token of the same sign-in.
 - R-6.3 WHEN a retired refresh token is used again within sixty seconds of being retired THE SYSTEM SHALL issue a further access token and refresh token for the same sign-in and SHALL leave the replacement it already issued valid.
 - R-6.4 IF a retired refresh token is used more than sixty seconds after being retired THEN THE SYSTEM SHALL cancel every token that came from the same sign-in and SHALL alert Munir.
-- R-6.5 IF a refresh token is expired, cancelled or unknown THEN THE SYSTEM SHALL answer with the standard error that tells the client to sign in again (`invalid_grant`) and no other.
+- R-6.5 IF the configured client, having given its identifier and secret, uses a refresh token that is expired, cancelled or unknown THEN THE SYSTEM SHALL answer with the standard error that tells the client to sign in again (`invalid_grant`) and no other.
 - R-6.6 THE SYSTEM SHALL accept a sign-in code once only, within five minutes of issuing it, and only together with the proof key that matches the challenge the sign-in began with.
-- R-6.7 THE SYSTEM SHALL store tokens and sign-in codes only as hashes, each with the user it belongs to.
+- R-6.7 THE SYSTEM SHALL store tokens and sign-in codes only as hashes, each with the user it belongs to: the one user the configuration names, and THE SYSTEM SHALL refuse to start when it names any other number.
 - R-6.8 IF a tool request carries no valid access token THEN THE SYSTEM SHALL answer that authorisation is required and SHALL say where the client can find out how to sign in.
 - R-6.9 WHEN Munir runs the cancel-all action on the server THE SYSTEM SHALL stop accepting every token issued before it.
 - R-6.10 WHEN the service is restarted THE SYSTEM SHALL go on accepting the valid tokens issued before the restart.
@@ -232,6 +232,8 @@ Open, to be decided before Phase 4 is approved (raised by Munir 2026-11-24):
 Resolved 2026-11-11 by Munir: a note edited from the phone gains the first line even if the service did not create it, and the line names who ordered it and from which application, so other applications can be added later (R-4.6). `inbox/` and `handoff/<repo>.md` stand for now; they are configuration and can change as the vault is tuned. The alert bot is a new Telegram bot named `MRC_MCP_Bot` (`MRC_MCP_1_Bot` if the handle is taken), used for nothing else, writing to Munir's private chat with it (R-8.5, R-10.9); the handle BotFather actually grants is recorded in `Plan.md` when the bot is created in Phase 2.
 
 Changed 2026-11-12 by Munir, at the Clarify gate of T1.2, T1.3, T1.5 and T1.9: R-9.1 gains the service's public address, which no criterion covered although the sign-in metadata and the Host check are built from it; R-3.10 is new, because a live repo's own settings can point version control at files outside the repo, which R-3.9 (programs only) does not cover.
+
+Changed 2026-11-24 by Munir, at the Clarify gate of T1.6, T1.7, T1.8 and T1.10: R-5.8 names the client's own return address (Claude's, fixed in code; a local trial alone may use one exact loopback address, Plan D-4) and says the refusal repeats nothing the request sent; R-6.7 says a sign-in belongs to the one configured user (D-12), so the service refuses to start with any other number; R-6.5 applies once the client has given its identifier and secret, since a refresh without them is R-6.13's `invalid_client`.
 
 ## Completeness checklist
 

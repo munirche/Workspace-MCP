@@ -29,7 +29,7 @@ recorded in `Plan.md`.
 - [x] T1.3 Configuration and its validation — criteria: R-1.1, R-1.4, R-9.1, R-9.2 — tests: `tests/workspace_mcp/test_config.py`
 - [x] T1.4 Which repos exist for a user, and the tool that lists them — criteria: R-1.2, R-1.3 — tests: `tests/workspace_mcp/test_visibility.py`
 - [x] T1.5 The one place that runs version control: caller text is only ever data, time limits, and nothing a repo's own settings name is ever run — criteria: R-3.3, R-3.4, R-3.9, R-3.10 — tests: `tests/workspace_mcp/test_git.py` [P]
-- [ ] T1.6 Starting and finishing a sign-in: the one client, its return address, the proof key, the client's secret, no registration, the "authorisation required" answer — criteria: R-5.8, R-5.9, R-5.10, R-6.6, R-6.8, R-6.11, R-6.12, R-6.13 — tests: `tests/workspace_mcp/test_auth_flow.py`
+- [x] T1.6 Starting and finishing a sign-in: the one client, its return address, the proof key, the client's secret, no registration, the "authorisation required" answer — criteria: R-5.8, R-5.9, R-5.10, R-6.6, R-6.8, R-6.11, R-6.12, R-6.13 — tests: `tests/workspace_mcp/test_auth_flow.py`
 - [ ] T1.7 Tokens: lifetimes, replacement, grace, reuse, cancel-all, restart — criteria: R-6.1, R-6.2, R-6.3, R-6.4, R-6.5, R-6.7, R-6.9, R-6.10 — tests: `tests/workspace_mcp/test_tokens.py`
 - [ ] T1.8 The sign-in window, the page and the passphrase — criteria: R-5.1, R-5.2, R-5.3, R-5.4, R-5.5, R-5.6, R-5.7 — tests: `tests/workspace_mcp/test_login.py`
 - [x] T1.9 Alerts and records — criteria: R-8.1, R-8.2, R-8.3, R-8.4 — tests: `tests/workspace_mcp/test_alerts.py` [P]

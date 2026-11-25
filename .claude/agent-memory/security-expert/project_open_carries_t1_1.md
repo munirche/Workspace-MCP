@@ -103,4 +103,49 @@ What the tests did not prove at Review (offered, low):
 
 Still owned by T1.10: `RepoMissing` is caught by name and answered with its sentence; its traceback (frame locals hold the raw name) is never rendered; the no-log test proves only that `paths.py` is silent, not the tool wrapper.
 
+From the Clarify gate for T1.6, T1.7, T1.8, T1.10 (2026-11-24, one long session; all of it my advice, so read Spec.md and Plan.md for what Munir chose, then check the tests at Plan and Review):
+
+Read in mcp 2.3.0 and uvicorn 0.54.0, not run:
+
+- The SDK's `/authorize` handler answers a bad client or return address with 400 JSON that echoes the caller's value, and a bad challenge with a redirect to the registered address, all before the provider is asked. So R-5.1's "not found" needs a gate of ours in front of the SDK's route, not inside `authorize()`.
+- The SDK loads a code or refresh token in one await and exchanges it in another, and trusts the object it loaded. Single use and rotation are atomic only if the provider's exchange re-reads and changes state in one transaction.
+- The SDK's expiry checks use the real clock and skip an expiry of None or 0. The provider enforces every expiry itself.
+- An omitted `redirect_uri` is accepted (the one registered address is used); an omitted challenge method means S256. Return addresses are compared as parsed URLs, so host case and `:443` pass; the redirect goes to the parsed form.
+- `/token` and both metadata routes carry the SDK's wildcard CORS. No cookie is involved and the client secret is required, so accepted as is.
+- uvicorn turns proxy headers on by default, reads `FORWARDED_ALLOW_IPS` from the environment, and with trust-all takes the leftmost forwarded value and rewrites the scheme. Advised: `proxy_headers=False` and one reader of our own.
+
+Positions advised (each needs a test or a recorded decision):
+
+- **Local trial (T1.6, T1.11):** the extra return address, the allowed Origin, a non-root window flag and the fake alert sender are passed in by a trial script outside the package; the builder refuses each unless the public address is http on loopback; `__main__` reads no name beyond the six.
+- **Cancel-all (T1.7):** a generation number in a root-owned file outside the service's state folder, compared for equality on every token check, fail closed when unreadable. Root never opens anything under the service's own folders (a link there would be a path from the service user to root). Covers unexchanged codes and pending sign-ins.
+- **Store (T1.7):** SHA-256 of 256-bit random values, no pepper; the code sets 0600 itself (the local run has a loose umask); validity is never cached in memory.
+- **Window (T1.8):** flag under `/run` in a root-owned folder, holding a nonce and the opening time; closings and the attempt count recorded by nonce in the store, the attempt reserved before scrypt runs; one verification at a time (128 MiB each under a 512M cap); `maxmem` passed explicitly; accepted parameter sets fixed in code and checked at start. A post with no pending sign-in is neither counted nor alerted. A wrong client id while the window is open gets the closed-window answer.
+- **T1.10:** no Origin allowed in production (trigger: Claude's requests in Phase 2 are seen to carry one); the address is for records only, never a decision.
+- **Put to Munir as unclear:** when and from what address the window-opened alert is sent (R-8.1); whether cancel-all covers codes and the window (R-6.9); expired-and-retired precedence and one alert per cancelled chain (R-6.4, R-6.5); what "name the client" shows (R-5.5).
+
+Decided by Munir at that gate (2026-11-24, per the coordinator; confirm in Spec.md and Plan.md): all Clarify advice taken, so do not reopen: return address fixed in code with a trial-only exact loopback address; retired-and-expired or cancelled-chain tokens get `invalid_grant` only, no second alert; cancel-all also kills codes, pending sign-ins and an open window; the window alert is "from the server"; the page names a fixed label. Declined: a second use of a code does not cancel the first use's tokens (no trigger named; mine would be a reported code-replay against Claude's callback).
+
+From the Plan gate for the same four (2026-11-24; my findings, check each at Review):
+
+- **Origin on `/login` (top):** a page served with `Referrer-Policy: no-referrer` makes browsers send `Origin: null` on its own form post (MDN, read 2026-11-24), so "foreign Origin gets 404" would refuse Munir himself while the test client passes. Advised `same-origin`, with `null` treated as foreign.
+- **Tests that pass for the wrong reason:** provider methods that never suspend cannot interleave on one event loop, so "two concurrent exchanges" proves nothing unless the test forces load, load, exchange, exchange; the concurrent-post tests need both posts held inside the verification.
+- **Cancel-all and the window:** "generation unchanged since first seen" is in memory, so a restart after cancel-all reopens a flag younger than ten minutes. Advised: the revoke command removes the flag, and the window row stores its generation.
+- **Revoke command:** no path argument in the installed command (a typo is a silent no-op of the kill switch); tests call its function; one test pins its path literal equal to the service's; shebang is the system Python with `-I`, never the release venv's.
+- **Trial locks:** the non-root flag owner and the trial Origin need the same loopback-only refusal as the return address; the default owner 0 must be shown refusing a flag the test user wrote.
+- **Smaller:** `/authorize` POST passes a query-only guard to the SDK's echoing 400 (advised GET only); `/login` body cap; `workers=1` (uvicorn reads `WEB_CONCURRENCY`); the unpatched scrypt set pinned as a literal and shown refusing the tests' cheap set; the T1.10 logging carries had no named test in the plan.
+- **Safe because of ordering:** `MemoryStore` and the ungated `/authorize` sit on master between merges; fine only while `__main__` stays a stub until T1.10 and no route calls `approve` without the passphrase check.
+
+From T1.6 Review (2026-11-24, uncommitted branch `t1.6-sign-in`, nothing blocking; read `auth.py`, `app.py` and `test_auth_flow.py` before raising again, the fixes offered were Munir's to take or decline):
+
+What is guaranteed: `AuthorizeGuard` parses the query with the same call Starlette uses, requires exactly one client id and at most one byte-equal return address, GET only, and its refusal is identical to an unknown path; `TokenForm` rebuilds the body from its own parse (so the SDK's parser sees one canonical id and secret), strips every Authorization header and refuses with fixed text; a code is consumed atomically and the race test forces the interleaving; any `Trial` object is refused on https; zero or two users stop the build.
+
+Offered, check whether taken:
+
+- **T1.7 (store swap):** the "token for another service" test had no positive control (an identical row with the service's own resource getting 200), so any defect in the hand-written row passes it. `exchange_refresh_token` issued from the object the SDK loaded, not from the store. The provider leaned on the SDK flag alone for R-6.11.
+- **T1.10:** the client record holds the secret in clear and pydantic's repr prints it; nothing in SDK 2.3.0 logs it. Offered a hidden repr and catching pydantic's error by name around `record()`. The SDK's `/token` 401 texts tell a wrong id from a wrong secret.
+- **Untested at Review:** `TokenForm`'s body cap and 413; a parameter repeated with two different values; the 300 s boundary.
+- **Phase 2:** the Basic header is decoded with `unquote_plus`, so the client secret should come from the URL-safe alphabet.
+
+Currency (searched 2026-11-24): no advisory found against the server side of mcp 2.3.0; GHSA-qx49-fqc8-xw99 (2026-09-28) is client-side discovery, fixed in 2.2.0. OWASP's scrypt floor read the same day: N=2^17, r=8, p=1.
+
 Related: [[supply-chain-decisions]]
