@@ -12,17 +12,24 @@ import time
 from dataclasses import dataclass
 from urllib.parse import parse_qsl, unquote_plus, urlencode, urlsplit
 
+from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import DEFAULT_MAX_REQUEST_BODY_SIZE, TransportSecuritySettings
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from starlette.responses import PlainTextResponse, Response
 
-from workspace_mcp import auth, login
-from workspace_mcp.config import ConfigError
+from workspace_mcp import auth, login, repo_tools
+from workspace_mcp.alerts import quiet_sdk_logs, record_tool_call
+from workspace_mcp.config import NAME, ConfigError
+from workspace_mcp.paths import RepoMissing
 
 TRIAL_RETURN = re.compile(r"http://(localhost|127\.0\.0\.1):[0-9]{1,5}/[A-Za-z0-9._~/-]*")
 FORM = b"application/x-www-form-urlencoded"
 BODY_LIMIT = DEFAULT_MAX_REQUEST_BODY_SIZE
+LOGGER = logging.getLogger("workspace_mcp")
+CUT_NOTE = " [Cut short to fit; ask for less.]"
+ECHOED_NAME_CHARS = 64
 
 
 @dataclass(frozen=True)
@@ -64,6 +71,7 @@ def build(config, *, store, alerts, clock=time.time, monotonic=time.monotonic, t
     page = login.Page(provider, store, window, client, config.public.issuer, passphrase_hash, alerts, clock)
     server = MCPServer(
         "Workspace-MCP",
+        middleware=[plain_sdk_refusals],
         auth_server_provider=provider,
         auth=AuthSettings(
             issuer_url=config.public.issuer,
@@ -82,8 +90,101 @@ def build(config, *, store, alerts, clock=time.time, monotonic=time.monotonic, t
             allowed_origins=[],
         ),
     )
+    _add_tools(server, config)
     app = CallerAddress(WindowWatch(TokenForm(SignInGate(inner, client, window, page), client), window))
+    app = Shield(HostGate(app, config.public.allowed_host))
     return Service(app=app, provider=provider, server=server, window=window)
+
+
+class NoTracebacks(logging.Filter):
+    """Keeps an exception's class and drops its text and traceback, for every logger."""
+
+    def filter(self, record):
+        if record.exc_info or record.exc_text or record.stack_info:
+            kind = record.exc_info[0].__name__ if record.exc_info and record.exc_info[0] else "an exception"
+            record.msg, record.args = f"{record.getMessage()} ({kind})", None
+            record.exc_info = record.exc_text = record.stack_info = None
+        return True
+
+
+def configure_logging(stream=None):
+    """The service's one log handler, set up before the SDK is built, with the SDK's records cut."""
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+    root = logging.getLogger()
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+    quiet_sdk_logs(handler)
+    # After the SDK's own filter, so its records are cut first; then anything
+    # else's traceback (uvicorn's lifespan, asyncio's lost tasks) loses its text.
+    handler.addFilter(NoTracebacks())
+    return handler
+
+
+def _add_tools(server, config):
+    @server.tool(
+        name="list_repos",
+        title="List repos",
+        description="Lists the repos you can read, and which of them you can also write to.",
+        annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
+    )
+    async def list_repos() -> CallToolResult:
+        return _answer(config, "list_repos", None, None, lambda user: repo_tools.list_repos_text(config, user))
+
+
+def _answer(config, tool, repo, path, produce):
+    # Every refusal or failure is one plain sentence (R-7.4): the SDK hides a
+    # plain exception's message and logs its traceback.
+    try:
+        token = get_access_token()
+        user = token.subject if token is not None else None
+        record_tool_call(LOGGER, user, tool, repo, path, auth.CALLER.get())
+        result = CallToolResult(content=[TextContent(type="text", text=produce(user))])
+    except RepoMissing as refusal:
+        result = CallToolResult(content=[TextContent(type="text", text=str(refusal))], is_error=True)
+    except Exception as error:
+        LOGGER.warning("tool %s failed (%s)", tool, type(error).__name__)
+        sentence = f"The {tool} tool could not answer just now; try again later."
+        result = CallToolResult(content=[TextContent(type="text", text=sentence)], is_error=True)
+    return fit(result, config.limits.result_chars)
+
+
+def fit(result, limit):
+    """The result cut to the limit, counting text and any structured content, and saying so when cut."""
+    structured = len(json.dumps(result.structured_content)) if result.structured_content is not None else 0
+    texts = [item.text for item in result.content]
+    if structured + sum(len(text) for text in texts) <= limit:
+        return result
+    room = max(0, limit - len(CUT_NOTE))
+    kept = []
+    for text in texts:
+        kept.append(text[:room])
+        room -= len(kept[-1])
+    kept[-1] = (kept[-1] + CUT_NOTE)[:limit]
+    return CallToolResult(content=[TextContent(type="text", text=text) for text in kept], is_error=result.is_error)
+
+
+async def plain_sdk_refusals(ctx, call_next):
+    """Rewrites the SDK's own unknown-tool and bad-argument answers, which echo the caller's text."""
+    result = await call_next(ctx)
+    if ctx.method != "tools/call" or not isinstance(result, dict) or result.get("isError") is not True:
+        return result
+    content = result.get("content") or []
+    text = content[0].get("text", "") if content and isinstance(content[0], dict) else ""
+    name = ctx.params.get("name") if isinstance(ctx.params, dict) else None
+    shown = name if isinstance(name, str) and len(name) <= ECHOED_NAME_CHARS and NAME.fullmatch(name) else None
+    if text.startswith("Unknown tool:"):
+        sentence = (f"There is no tool called '{shown}'" if shown else "There is no such tool") + (
+            "; the tool list shows the ones this service has.")
+    elif text.startswith(f"Error executing tool {name}: "):
+        named = f"for '{shown}' " if shown else ""
+        sentence = f"The arguments {named}were not valid; check them against the tool's description."
+    elif text.startswith("Error executing tool "):
+        # The bare form is the SDK's answer to a tool that raised, not to bad arguments.
+        sentence = f"The {shown or 'requested'} tool could not answer just now; try again later."
+    else:
+        return result
+    return {**result, "content": [{"type": "text", "text": sentence}]}
 
 
 def _check_trial(config, trial):
@@ -92,6 +193,50 @@ def _check_trial(config, trial):
         raise ConfigError("trial settings are refused unless the service runs on the local machine")
     if trial.return_address is not None and not TRIAL_RETURN.fullmatch(trial.return_address):
         raise ConfigError("the trial return address must be one exact http://localhost:<port>/<path> address")
+
+
+class Shield:
+    """Turns any exception into a plain 500, recorded by its class alone, so no traceback reaches a log."""
+
+    def __init__(self, app):
+        self._app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self._app(scope, receive, send)
+        started = False
+
+        async def tracked(message):
+            nonlocal started
+            started = started or message["type"] == "http.response.start"
+            await send(message)
+
+        try:
+            await self._app(scope, receive, tracked)
+        except Exception as error:
+            LOGGER.warning("request failed (%s)", type(error).__name__)
+            if not started:
+                await PlainTextResponse("Internal Server Error", status_code=500)(scope, receive, send)
+
+
+class HostGate:
+    """Refuses any request whose one Host header is not the service's own name (R-7.9), on every route."""
+
+    def __init__(self, app, allowed_host):
+        self._app = app
+        self._allowed = [allowed_host.encode()]
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "lifespan":
+            return await self._app(scope, receive, send)
+        if scope["type"] != "http":
+            if scope["type"] == "websocket":
+                await send({"type": "websocket.close", "code": 1008})
+            return
+        # X-Forwarded-Host is never read: nginx sets Host to its own server name.
+        if [value for name, value in scope["headers"] if name == b"host"] != self._allowed:
+            return await PlainTextResponse("Misdirected Request", status_code=421)(scope, receive, send)
+        await self._app(scope, receive, send)
 
 
 class CallerAddress:

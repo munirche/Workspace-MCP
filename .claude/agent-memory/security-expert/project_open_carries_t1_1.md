@@ -174,6 +174,18 @@ Offered, check whether taken:
 - **T1.10:** uvicorn `lifespan="on"`, or a failed start-up leaves the service running with no window watch.
 - **T2.x:** `workspace-mcp-signin` writes by temp file and rename, 0644, random nonce, in a root-owned 0755 folder; its path pinned equal to `login.FLAG_PATH`.
 
+From T1.10 Review (2026-11-24, uncommitted on `t1.10-app`, nothing blocking; read `app.py` (Shield, HostGate, `_answer`, `configure_logging`), `__main__.py` and `test_app.py` before raising again, the fixes offered were Munir's to take or decline). This closes the T1.10 bullets under "From T1.9 Review" except where repeated here.
+
+What is guaranteed: Shield turns any exception on an http scope into a plain 500 logged by class, so uvicorn never logs a request's traceback; HostGate requires exactly one Host equal to the configured one before any token check, closes websockets and reads no forwarded host; a tool call is recorded before it runs and any failure is one fixed sentence; the SDK's own unknown-tool and bad-argument answers are rewritten without the caller's value; uvicorn runs with no proxy headers, no access log, lifespan on, one worker; the entry point takes no argument and no trial option; mcp 2.3.0 reads no setting from the environment and its debug flag defaults off.
+
+Offered, check whether taken:
+
+- **Logging order unproven (top):** under pytest root always has handlers, so the SDK's `basicConfig` is a no-op in any order; the entry-point test patched `configure_logging` out. Advised a test that empties root's handlers, runs `main`, and walks every logger for exactly one handler carrying the filter.
+- **Tracebacks from other loggers:** the handler still renders `exc_info` for non-`mcp` records (uvicorn's lifespan failure, asyncio's unretrieved task errors). Advised a handler filter that keeps only the class name, with a marker test on both loggers.
+- **Start-up refusal:** it logged the text of any `ValueError`. Traced on 2026-11-24: no secret reachable (the sender's text is fixed, the client record's fields are plain strings, the settings model would echo the public address only). But pydantic's error is a `ValueError` that prints input values, and `OSError` or SQLite errors from the store were uncaught. Advised: config errors by text, anything else by class.
+- **T2.1:** the config path is found relative to the module file, so it is the release's own only when the package is imported from the release's `Code/` folder; installed into the venv it points nowhere and the service refuses to start. T2.1 pins how the package gets on the path (not the working folder) and checks it under the unit.
+- **T1.11:** read the trial's journal for one sign-in and one forced failure; no offline test sees uvicorn's own records.
+
 Currency (searched 2026-11-24): no advisory found against the server side of mcp 2.3.0; GHSA-qx49-fqc8-xw99 (2026-09-28) is client-side discovery, fixed in 2.2.0. OWASP's scrypt floor read the same day: N=2^17, r=8, p=1.
 
 Related: [[supply-chain-decisions]]

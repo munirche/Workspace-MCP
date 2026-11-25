@@ -33,7 +33,7 @@ recorded in `Plan.md`.
 - [x] T1.7 Tokens: lifetimes, replacement, grace, reuse, cancel-all, restart — criteria: R-6.1, R-6.2, R-6.3, R-6.4, R-6.5, R-6.7, R-6.9, R-6.10 — tests: `tests/workspace_mcp/test_tokens.py`
 - [x] T1.8 The sign-in window, the page and the passphrase — criteria: R-5.1, R-5.2, R-5.3, R-5.4, R-5.5, R-5.6, R-5.7 — tests: `tests/workspace_mcp/test_login.py`
 - [x] T1.9 Alerts and records — criteria: R-8.1, R-8.2, R-8.3, R-8.4 — tests: `tests/workspace_mcp/test_alerts.py` [P]
-- [ ] T1.10 Assembling the service: tool titles and declarations, result size, plain refusals, and refusing any host name but its own — criteria: R-7.1, R-7.2, R-7.4, R-7.9 — tests: `tests/workspace_mcp/test_app.py`
+- [x] T1.10 Assembling the service: tool titles and declarations, result size, plain refusals, and refusing any host name but its own — criteria: R-7.1, R-7.2, R-7.4, R-7.9 — tests: `tests/workspace_mcp/test_app.py`
 - [ ] T1.11 The local trial — criteria: none (manual checklist below)
 
 Manual checklist:

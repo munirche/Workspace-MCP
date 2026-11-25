@@ -560,6 +560,7 @@ def test_a_basic_token_request_declaring_too_much_is_refused_before_it_is_read(f
         "method": "POST",
         "path": "/token",
         "headers": [
+            (b"host", flow.config.public.allowed_host.encode()),
             (b"authorization", _basic(flow.client_id, flow.secret).encode()),
             (b"content-type", b"application/x-www-form-urlencoded"),
             (b"content-length", b"201"),
