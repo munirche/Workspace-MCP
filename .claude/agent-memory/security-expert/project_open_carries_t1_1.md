@@ -146,6 +146,20 @@ Offered, check whether taken:
 - **Untested at Review:** `TokenForm`'s body cap and 413; a parameter repeated with two different values; the 300 s boundary.
 - **Phase 2:** the Basic header is decoded with `unquote_plus`, so the client secret should come from the URL-safe alphabet.
 
+From T1.7 Review (2026-11-24, uncommitted on `t1.7-tokens`, nothing blocking; read `auth.py`, `alerts.py` (Queue), `deploy/workspace-mcp-revoke-all` and `test_tokens.py` before raising again, the fixes offered were Munir's to take or decline):
+
+What is guaranteed: every value is hashed before it reaches a statement; each change is one `BEGIN IMMEDIATE` on a fresh connection and `rotate()` re-reads inside it; the generation is read per check through no link and compared for equality, unreadable means refuse; a public build refuses any generation path but the constant; the revoke command takes no argument, runs the system Python isolated, imports nothing of ours, writes by exclusive temp file and rename, and unlinks the flag; the T1.6 positive control for R-6.11 landed, with the provider's own resource check.
+
+Offered, check whether taken:
+
+- **A number that repeats revives tokens (top):** validity is equality, and a missing file restarted the count (the command wrote 1; a test pinned it). A chain stamped with a number the count reaches again is live if under thirty days old; same for `/etc` restored from a backup. Advised: the service keeps the highest number seen in its store and refuses everything below it; the command seeds a missing file from the clock.
+- **An event with no record:** the queue's worker had no `except`, so one escaping exception ends all alerts silently; a send stuck in name lookup blocks the rest; queued alerts die at restart. Advised: a journal line at `send_later`, before queueing.
+- **Clock stepped back:** a negative time since retirement counted as grace. Advised: dead.
+- **Revoke command, small:** no folder fsync after the rename; a failed flag unlink exits 1 after the number moved; no test for a link planted at the temp name.
+- **T1.8:** pin the command's flag path equal to the service's; pending rows had no expiry and nothing is purged.
+- **T2.x:** `/etc/workspace-mcp` root-owned and 0755 is a checklist line, since the command trusts its folder.
+- **Tests:** a public-URL flow in `conftest.py` reads the real generation file (not a secret, never written), so the suite can differ between the box and CI once deployed.
+
 Currency (searched 2026-11-24): no advisory found against the server side of mcp 2.3.0; GHSA-qx49-fqc8-xw99 (2026-09-28) is client-side discovery, fixed in 2.2.0. OWASP's scrypt floor read the same day: N=2^17, r=8, p=1.
 
 Related: [[supply-chain-decisions]]

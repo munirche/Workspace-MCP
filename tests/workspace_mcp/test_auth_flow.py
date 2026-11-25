@@ -336,12 +336,8 @@ def test_the_service_checks_whom_a_token_was_issued_for(flow):
 def test_a_token_issued_for_another_service_is_refused(flow):
     """Covers: R-6.11"""
     for name, resource in (("own", flow.config.public.resource), ("other", "https://other.example/mcp")):
-        flow.store.put_tokens(
-            f"{name}-access",
-            auth.Grant("munir", flow.client_id, ("workspace", "offline_access"), resource, flow.clock() + 3600),
-            f"{name}-refresh",
-            auth.Grant("munir", flow.client_id, ("workspace", "offline_access"), resource, flow.clock() + 86400),
-        )
+        chain = auth.Chain("munir", flow.client_id, ("workspace", "offline_access"), resource, 0)
+        flow.store.start_chain(chain, flow.clock(), f"{name}-access", f"{name}-refresh")
     assert flow.mcp("own-access").status_code == 200
     assert flow.mcp("other-access").status_code == 401
     # Refused by the service's own check too, whatever the SDK's setting.
@@ -659,9 +655,12 @@ def test_a_local_trial_signs_in_to_its_own_address_only(make_flow):
     _not_found(trial, trial.authorize(challenge, redirect_uri=auth.CLAUDE_CALLBACK))
 
 
-def test_a_public_service_takes_its_address_in_any_case_or_with_the_default_port(make_flow):
+def test_a_public_service_takes_its_address_in_any_case_or_with_the_default_port(make_flow, monkeypatch, tmp_path):
     """Covers: R-6.11"""
-    public = make_flow(public_url=PUBLIC)
+    generation = tmp_path / "generation"
+    generation.write_text("0\n")
+    monkeypatch.setattr(auth, "GENERATION_PATH", str(generation))
+    public = make_flow(public_url=PUBLIC, generation=generation)
     for resource in ("https://MCP.example.test/mcp", "https://mcp.example.test:443/mcp"):
         assert public.mcp(public.sign_in(resource=resource)["access_token"]).status_code == 200
 

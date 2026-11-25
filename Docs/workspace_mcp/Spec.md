@@ -126,12 +126,12 @@ There is no sign-in page unless Munir has opened one, and only the one configure
 - R-6.1 WHEN a sign-in completes THE SYSTEM SHALL issue an access token valid for one hour and a refresh token valid for thirty days.
 - R-6.2 WHEN a valid refresh token is used THE SYSTEM SHALL issue a new access token and a new refresh token whose thirty days start at that moment, and SHALL retire the one used and every other refresh token of the same sign-in.
 - R-6.3 WHEN a retired refresh token is used again within sixty seconds of being retired THE SYSTEM SHALL issue a further access token and refresh token for the same sign-in and SHALL leave the replacement it already issued valid.
-- R-6.4 IF a retired refresh token is used more than sixty seconds after being retired THEN THE SYSTEM SHALL cancel every token that came from the same sign-in and SHALL alert Munir.
+- R-6.4 IF a retired refresh token, not yet expired and of a sign-in not already cancelled, is used more than sixty seconds after being retired THEN THE SYSTEM SHALL cancel every token that came from the same sign-in and SHALL alert Munir.
 - R-6.5 IF the configured client, having given its identifier and secret, uses a refresh token that is expired, cancelled or unknown THEN THE SYSTEM SHALL answer with the standard error that tells the client to sign in again (`invalid_grant`) and no other.
 - R-6.6 THE SYSTEM SHALL accept a sign-in code once only, within five minutes of issuing it, and only together with the proof key that matches the challenge the sign-in began with.
 - R-6.7 THE SYSTEM SHALL store tokens and sign-in codes only as hashes, each with the user it belongs to: the one user the configuration names, and THE SYSTEM SHALL refuse to start when it names any other number.
 - R-6.8 IF a tool request carries no valid access token THEN THE SYSTEM SHALL answer that authorisation is required and SHALL say where the client can find out how to sign in.
-- R-6.9 WHEN Munir runs the cancel-all action on the server THE SYSTEM SHALL stop accepting every token issued before it.
+- R-6.9 WHEN Munir runs the cancel-all action on the server THE SYSTEM SHALL stop accepting every token, sign-in code and unfinished sign-in issued before it, and SHALL close the sign-in window.
 - R-6.10 WHEN the service is restarted THE SYSTEM SHALL go on accepting the valid tokens issued before the restart.
 - R-6.11 IF an access token was issued for a service address other than this service's own THEN THE SYSTEM SHALL refuse it.
 - R-6.12 THE SYSTEM SHALL accept token requests in the standard form encoding that the client sends.
@@ -233,7 +233,7 @@ Resolved 2026-11-11 by Munir: a note edited from the phone gains the first line 
 
 Changed 2026-11-12 by Munir, at the Clarify gate of T1.2, T1.3, T1.5 and T1.9: R-9.1 gains the service's public address, which no criterion covered although the sign-in metadata and the Host check are built from it; R-3.10 is new, because a live repo's own settings can point version control at files outside the repo, which R-3.9 (programs only) does not cover.
 
-Changed 2026-11-24 by Munir, at the Clarify gate of T1.6, T1.7, T1.8 and T1.10: R-5.8 names the client's own return address (Claude's, fixed in code; a local trial alone may use one exact loopback address, Plan D-4) and says the refusal repeats nothing the request sent; R-6.7 says a sign-in belongs to the one configured user (D-12), so the service refuses to start with any other number; R-6.5 applies once the client has given its identifier and secret, since a refresh without them is R-6.13's `invalid_client`.
+Changed 2026-11-24 by Munir, at the Clarify gate of T1.6, T1.7, T1.8 and T1.10: R-5.8 names the client's own return address (Claude's, fixed in code; a local trial alone may use one exact loopback address, Plan D-4) and says the refusal repeats nothing the request sent; R-6.7 says a sign-in belongs to the one configured user (D-12), so the service refuses to start with any other number; R-6.4 leaves an expired token, or one of a sign-in already cancelled, to R-6.5 alone, with no second alert; R-6.9 also ends codes and unfinished sign-ins and closes the window; R-6.5 applies once the client has given its identifier and secret, since a refresh without them is R-6.13's `invalid_client`.
 
 ## Completeness checklist
 

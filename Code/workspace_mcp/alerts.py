@@ -4,7 +4,9 @@ import enum
 import ipaddress
 import json
 import logging
+import queue
 import re
+import threading
 import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
@@ -46,6 +48,12 @@ class Alerts:
         self._logger = logger
         self._clock = clock
 
+    def note(self, event, address):
+        # Recorded before the alert is sent, so a stuck or failed sender still leaves a trace.
+        when = self._clock().astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+        self._logger.warning("alert: %s at %s from %s", getattr(event, "name", "unknown"), when,
+                             address_text(address))
+
     def send(self, event, address):
         if not isinstance(event, Event):
             raise TypeError("an alert is one of the fixed events")
@@ -58,6 +66,35 @@ class Alerts:
             self._logger.warning("alert not delivered: %s at %s from %s (%s)", event.name, when, where, reason)
             return False
         return True
+
+    def lost(self, error):
+        self._logger.warning("alert not delivered (%s)", type(error).__name__)
+
+
+class Queue:
+    """Sends alerts on one worker thread, so no answer waits on Telegram."""
+
+    def __init__(self, alerts):
+        self._alerts = alerts
+        self._queue = queue.Queue()
+        threading.Thread(target=self._run, name="alerts", daemon=True).start()
+
+    def send_later(self, event, address):
+        self._alerts.note(event, address)
+        self._queue.put((event, address))
+
+    def join(self):
+        self._queue.join()
+
+    def _run(self):
+        while True:
+            event, address = self._queue.get()
+            try:
+                self._alerts.send(event, address)
+            except Exception as error:
+                self._alerts.lost(error)
+            finally:
+                self._queue.task_done()
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):

@@ -1,0 +1,89 @@
+#!/usr/bin/python3 -I
+"""Cancels every token, code and sign-in the service has issued, and closes the sign-in window."""
+
+import os
+import re
+import stat
+import sys
+import time
+
+# The service reads GENERATION; tests pin both paths to the service's own.
+GENERATION = "/etc/workspace-mcp/generation"
+FLAG = "/run/workspace-mcp-signin/open"
+NUMBER = re.compile(rb"[0-9]{1,18}\n")
+
+
+class Refused(Exception):
+    pass
+
+
+class WindowNotClosed(Exception):
+    pass
+
+
+def revoke(generation_path=GENERATION, flag_path=FLAG):
+    # Never lower than the clock, so a lost or restored file cannot bring back
+    # a number that tokens were issued under.
+    new = max(_current(generation_path) + 1, int(time.time()))
+    folder = os.path.dirname(generation_path) or "."
+    temporary = os.path.join(folder, ".generation.new")
+    try:
+        os.unlink(temporary)
+    except FileNotFoundError:
+        pass
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+    try:
+        os.fchmod(descriptor, 0o644)
+        os.write(descriptor, f"{new}\n".encode())
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    os.replace(temporary, generation_path)
+    folder_descriptor = os.open(folder, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(folder_descriptor)
+    finally:
+        os.close(folder_descriptor)
+    try:
+        os.unlink(flag_path)
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        raise WindowNotClosed(f"tokens are cancelled (number {new}), but the sign-in window could not be "
+                              f"closed: {error.strerror}") from None
+    return new
+
+
+def _current(path):
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return 0
+    except OSError:
+        raise Refused(f"{path} cannot be opened (a link is refused)") from None
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise Refused(f"{path} is not a regular file")
+        text = os.read(descriptor, 32)
+    finally:
+        os.close(descriptor)
+    if not NUMBER.fullmatch(text):
+        raise Refused(f"{path} does not hold one number; nothing was changed")
+    return int(text)
+
+
+def main(argv):
+    if len(argv) != 1:
+        print("workspace-mcp-revoke-all takes no arguments", file=sys.stderr)
+        return 2
+    try:
+        new = revoke()
+    except (Refused, WindowNotClosed, OSError) as error:
+        print(f"workspace-mcp-revoke-all: {error}", file=sys.stderr)
+        return 1
+    print(f"Every token issued before now is cancelled (number {new}); the sign-in window is closed.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

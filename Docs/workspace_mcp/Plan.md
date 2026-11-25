@@ -2,7 +2,7 @@
 
 ## Current State
 
-**As of 2026-11-24.** Phase 1 is under way; seven of its eleven tasks are
+**As of 2026-11-24.** Phase 1 is under way; eight of its eleven tasks are
 built, not yet run as one service. T1.1 pinned `mcp` 2.3.0 and its
 dependencies by hash and tried the SDK ("The SDK, as Tried"). T1.2: the repo
 checks itself (no tracked credential, deny-only assistant settings, the lock
@@ -16,14 +16,16 @@ and refuses any other name with the one answer a missing repo gets;
 `list_repos` gives names and whether each is writable. T1.6: `auth.py` and
 `app.py` start and finish a sign-in for the one client (D-4): Claude's
 callback fixed in code, S256 only, no registration, the service's own
-address on every token, `workspace` on every token (D-8), a code used once,
-the client's secret taken in the form or a Basic header, and another client
-or return address refused with a plain 404; tokens are held in memory until
-T1.7 moves them to SQLite. Munir approved phases 1–2 in `Tasks.md` (rev 2,
-2026-11-12); phases 3–5 are draft.
-**Next:** T1.7 (tokens), T1.8 (window, page, passphrase), T1.10 (the
-service assembled), then T1.11's local trial, built in one session from the
-plan Munir approved 2026-11-24 after both experts' review.
+address and `workspace` on every token (D-8), a code used once, the client's
+secret taken in the form or a Basic header, and another client or return
+address refused with a plain 404. T1.7: tokens kept hashed in SQLite with
+rotation, the 60-second grace and reuse detection, surviving a restart, and
+`workspace-mcp-revoke-all` cancelling everything issued before it (D-4).
+Munir approved phases 1–2 in `Tasks.md` (rev 2, 2026-11-12); phases 3–5 are
+draft.
+**Next:** T1.8 (window, page, passphrase), T1.10 (the service assembled),
+then T1.11's local trial, built in one session from the plan Munir approved
+2026-11-24 after both experts' review.
 **Watch:** sessions on the box cannot `sudo`, so every deploy step is Munir's,
 from `deploy/DEPLOY.md`. Claude never sees a real secret: the local trial uses
 throwaway values. Anthropic's address ranges and the connector's sign-in rules
@@ -207,7 +209,21 @@ no-framing policy, so the sign-in page cannot be embedded in another site.
   other refresh token of the sign-in, so a copy held by a thief ends up
   retired, and its use after the 60 seconds revokes the whole chain and
   alerts. Codes single-use for 5 minutes. These lifetimes are fixed in code,
-  not configuration. The token endpoint requires the client's secret on
+  not configuration. Kept in SQLite (`/var/lib/workspace-mcp/tokens.db`,
+  mode 0600, made so before SQLite opens it) as SHA-256 hashes of 256-bit
+  random values, each rotation one locked transaction, nothing cached in
+  memory, so a restart changes nothing. Cancel-all is
+  `workspace-mcp-revoke-all` (sudo, the system Python, no arguments): it
+  raises the number in root-owned `/etc/workspace-mcp/generation` (to the
+  current Unix time at least, so a lost file never restarts the count) and
+  deletes the sign-in flag. The service reads that number on every check and
+  accepts a token, code or unfinished sign-in only under the number it was
+  issued with; an unreadable number, or one lower than the highest it has
+  seen (a restored file), refuses everything until the command runs again.
+  The service user can read the number but never write it, and root never
+  opens the service's own folder; `/etc/workspace-mcp` stays root-owned 0755
+  (a T2.2 check). Every alert is written to the journal before it is sent,
+  on one worker thread, so a stuck Telegram never holds up an answer (T1.7). The token endpoint requires the client's secret on
   every exchange (the client id alone is not secret: it passes through the
   browser), and an access token is accepted only if it was issued for this
   service's own address. Refused refresh tokens get exactly `invalid_grant`.
