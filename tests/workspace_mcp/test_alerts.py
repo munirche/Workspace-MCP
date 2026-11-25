@@ -6,6 +6,7 @@ import inspect
 import io
 import json
 import logging
+import threading
 import urllib.error
 from datetime import UTC, datetime, timedelta, timezone
 
@@ -359,3 +360,37 @@ def test_records_of_the_service_itself_pass_unchanged(quiet, records):
     _, stream = records
     logging.getLogger("workspace_mcp.test").info("kept %s", "as is")
     assert "workspace_mcp.test INFO kept as is" in stream.getvalue().splitlines()
+
+
+def test_a_queued_alert_is_recorded_before_it_is_sent(caplog):
+    """Covers: R-8.2"""
+    release, sent = threading.Event(), []
+
+    def stuck(text):
+        release.wait(5)
+        sent.append(text)
+
+    caplog.set_level(logging.INFO, logger="test.queue")
+    queue = alerts.Queue(Alerts(stuck, logging.getLogger("test.queue"), clock=lambda: NOW))
+    queue.send_later(Event.REFRESH_TOKEN_REUSED, "203.0.113.9")
+    assert [record.getMessage() for record in caplog.records] == [
+        "alert: REFRESH_TOKEN_REUSED at 2026-11-16 21:05:09 UTC from 203.0.113.9"
+    ]
+    release.set()
+    queue.join()
+    assert len(sent) == 1
+
+
+def test_an_alert_that_fails_inside_the_queue_does_not_stop_the_next(caplog):
+    """Covers: R-8.2"""
+    sent = []
+    caplog.set_level(logging.INFO, logger="test.queue")
+    queue = alerts.Queue(Alerts(sent.append, logging.getLogger("test.queue"), clock=lambda: NOW))
+    queue.send_later("not an event", None)
+    queue.send_later(Event.WINDOW_OPENED, None)
+    waiter = threading.Thread(target=queue.join, daemon=True)
+    waiter.start()
+    waiter.join(5)
+    assert not waiter.is_alive(), "the queue stopped after a failed alert"
+    assert len(sent) == 1 and "the sign-in window was opened" in sent[0]
+    assert "alert not delivered (TypeError)" in [record.getMessage() for record in caplog.records]

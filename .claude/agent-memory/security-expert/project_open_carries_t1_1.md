@@ -146,6 +146,46 @@ Offered, check whether taken:
 - **Untested at Review:** `TokenForm`'s body cap and 413; a parameter repeated with two different values; the 300 s boundary.
 - **Phase 2:** the Basic header is decoded with `unquote_plus`, so the client secret should come from the URL-safe alphabet.
 
+From T1.7 Review (2026-11-24, uncommitted on `t1.7-tokens`, nothing blocking; read `auth.py`, `alerts.py` (Queue), `deploy/workspace-mcp-revoke-all` and `test_tokens.py` before raising again, the fixes offered were Munir's to take or decline):
+
+What is guaranteed: every value is hashed before it reaches a statement; each change is one `BEGIN IMMEDIATE` on a fresh connection and `rotate()` re-reads inside it; the generation is read per check through no link and compared for equality, unreadable means refuse; a public build refuses any generation path but the constant; the revoke command takes no argument, runs the system Python isolated, imports nothing of ours, writes by exclusive temp file and rename, and unlinks the flag; the T1.6 positive control for R-6.11 landed, with the provider's own resource check.
+
+Offered, check whether taken:
+
+- **A number that repeats revives tokens (top):** validity is equality, and a missing file restarted the count (the command wrote 1; a test pinned it). A chain stamped with a number the count reaches again is live if under thirty days old; same for `/etc` restored from a backup. Advised: the service keeps the highest number seen in its store and refuses everything below it; the command seeds a missing file from the clock.
+- **An event with no record:** the queue's worker had no `except`, so one escaping exception ends all alerts silently; a send stuck in name lookup blocks the rest; queued alerts die at restart. Advised: a journal line at `send_later`, before queueing.
+- **Clock stepped back:** a negative time since retirement counted as grace. Advised: dead.
+- **Revoke command, small:** no folder fsync after the rename; a failed flag unlink exits 1 after the number moved; no test for a link planted at the temp name.
+- **T1.8:** pin the command's flag path equal to the service's; pending rows had no expiry and nothing is purged.
+- **T2.x:** `/etc/workspace-mcp` root-owned and 0755 is a checklist line, since the command trusts its folder.
+- **Tests:** a public-URL flow in `conftest.py` reads the real generation file (not a secret, never written), so the suite can differ between the box and CI once deployed.
+
+From T1.8 Review (2026-11-24, uncommitted on `t1.8-login`, nothing blocking; read `login.py`, `app.py` (SignInGate, WindowWatch), `scripts/hash_passphrase.py` and `test_login.py` before raising again, the fixes offered were Munir's to take or decline):
+
+What is guaranteed: a caller without the client id never reaches the window check on `/authorize`, so open and closed are one path for them; the flag is read through no link, must be a regular file of the expected owner with no group or world write, and parse strictly; closings, the attempt count and the generation at first sight live in the store by nonce; an attempt is reserved atomically before scrypt runs and one check runs at a time off the loop; a post is counted only with a live sign-in of this window, an absent or own Origin and a small form body; the page is built from configuration only; flag path and owner are trial fields, refused off loopback; the T1.7 advice on a repeating number landed (`highest` table).
+
+Accepted deviation (recorded in `memory.md`): no cap on pending sign-ins or on `state`; a new window purges older pending rows. My view: acceptable, because a pending row needs the configured client id, an open window and a request line the server already bounds. Revisit when: a second client exists, the client id is known beyond Munir and Claude, or T2.2 finds another process able to reach the socket.
+
+Offered, check whether taken:
+
+- **Two sign-ins in one window:** after the passphrase check nothing re-checked the window, so two posts carrying different pending ids could both be approved; the concurrency test used one id and passed because the pending row is taken once. Advised: close the window first and approve only if that close changed a row; a two-id test.
+- **Helper:** refuse a passphrase with leading or trailing whitespace (a paste artefact burns attempts at the first sign-in).
+- **Tests:** no alert test for a wrong passphrase or a sign-in naming the forwarded address; `_closed` probes `/login` without a live id, so it cannot tell open from closed there.
+- **T1.10:** uvicorn `lifespan="on"`, or a failed start-up leaves the service running with no window watch.
+- **T2.x:** `workspace-mcp-signin` writes by temp file and rename, 0644, random nonce, in a root-owned 0755 folder; its path pinned equal to `login.FLAG_PATH`.
+
+From T1.10 Review (2026-11-24, uncommitted on `t1.10-app`, nothing blocking; read `app.py` (Shield, HostGate, `_answer`, `configure_logging`), `__main__.py` and `test_app.py` before raising again, the fixes offered were Munir's to take or decline). This closes the T1.10 bullets under "From T1.9 Review" except where repeated here.
+
+What is guaranteed: Shield turns any exception on an http scope into a plain 500 logged by class, so uvicorn never logs a request's traceback; HostGate requires exactly one Host equal to the configured one before any token check, closes websockets and reads no forwarded host; a tool call is recorded before it runs and any failure is one fixed sentence; the SDK's own unknown-tool and bad-argument answers are rewritten without the caller's value; uvicorn runs with no proxy headers, no access log, lifespan on, one worker; the entry point takes no argument and no trial option; mcp 2.3.0 reads no setting from the environment and its debug flag defaults off.
+
+Offered, check whether taken:
+
+- **Logging order unproven (top):** under pytest root always has handlers, so the SDK's `basicConfig` is a no-op in any order; the entry-point test patched `configure_logging` out. Advised a test that empties root's handlers, runs `main`, and walks every logger for exactly one handler carrying the filter.
+- **Tracebacks from other loggers:** the handler still renders `exc_info` for non-`mcp` records (uvicorn's lifespan failure, asyncio's unretrieved task errors). Advised a handler filter that keeps only the class name, with a marker test on both loggers.
+- **Start-up refusal:** it logged the text of any `ValueError`. Traced on 2026-11-24: no secret reachable (the sender's text is fixed, the client record's fields are plain strings, the settings model would echo the public address only). But pydantic's error is a `ValueError` that prints input values, and `OSError` or SQLite errors from the store were uncaught. Advised: config errors by text, anything else by class.
+- **T2.1:** the config path is found relative to the module file, so it is the release's own only when the package is imported from the release's `Code/` folder; installed into the venv it points nowhere and the service refuses to start. T2.1 pins how the package gets on the path (not the working folder) and checks it under the unit.
+- **T1.11:** read the trial's journal for one sign-in and one forced failure; no offline test sees uvicorn's own records.
+
 Currency (searched 2026-11-24): no advisory found against the server side of mcp 2.3.0; GHSA-qx49-fqc8-xw99 (2026-09-28) is client-side discovery, fixed in 2.2.0. OWASP's scrypt floor read the same day: N=2^17, r=8, p=1.
 
 Related: [[supply-chain-decisions]]

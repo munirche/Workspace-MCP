@@ -336,12 +336,8 @@ def test_the_service_checks_whom_a_token_was_issued_for(flow):
 def test_a_token_issued_for_another_service_is_refused(flow):
     """Covers: R-6.11"""
     for name, resource in (("own", flow.config.public.resource), ("other", "https://other.example/mcp")):
-        flow.store.put_tokens(
-            f"{name}-access",
-            auth.Grant("munir", flow.client_id, ("workspace", "offline_access"), resource, flow.clock() + 3600),
-            f"{name}-refresh",
-            auth.Grant("munir", flow.client_id, ("workspace", "offline_access"), resource, flow.clock() + 86400),
-        )
+        chain = auth.Chain("munir", flow.client_id, ("workspace", "offline_access"), resource, 0)
+        flow.store.start_chain(chain, flow.clock(), f"{name}-access", f"{name}-refresh")
     assert flow.mcp("own-access").status_code == 200
     assert flow.mcp("other-access").status_code == 401
     # Refused by the service's own check too, whatever the SDK's setting.
@@ -564,6 +560,7 @@ def test_a_basic_token_request_declaring_too_much_is_refused_before_it_is_read(f
         "method": "POST",
         "path": "/token",
         "headers": [
+            (b"host", flow.config.public.allowed_host.encode()),
             (b"authorization", _basic(flow.client_id, flow.secret).encode()),
             (b"content-type", b"application/x-www-form-urlencoded"),
             (b"content-length", b"201"),
@@ -659,11 +656,22 @@ def test_a_local_trial_signs_in_to_its_own_address_only(make_flow):
     _not_found(trial, trial.authorize(challenge, redirect_uri=auth.CLAUDE_CALLBACK))
 
 
-def test_a_public_service_takes_its_address_in_any_case_or_with_the_default_port(make_flow):
+def test_a_public_service_takes_its_https_address_in_any_case_or_with_port_443(make_flow):
     """Covers: R-6.11"""
-    public = make_flow(public_url=PUBLIC)
-    for resource in ("https://MCP.example.test/mcp", "https://mcp.example.test:443/mcp"):
-        assert public.mcp(public.sign_in(resource=resource)["access_token"]).status_code == 200
+    provider = make_flow(public_url=PUBLIC).service.provider
+    for resource in (PUBLIC + "/mcp", "https://MCP.example.test/mcp", "https://mcp.example.test:443/mcp",
+                     PUBLIC + "/mcp/"):
+        assert provider._resource(resource) == PUBLIC + "/mcp"
+    for resource in ("http://mcp.example.test/mcp", "https://mcp.example.test:8443/mcp"):
+        with pytest.raises(Exception, match="itself only"):
+            provider._resource(resource)
+
+
+def test_the_service_takes_its_address_in_any_case_or_with_the_default_port(make_flow):
+    """Covers: R-6.11"""
+    portless = make_flow(public_url="http://localhost")
+    for resource in ("http://LOCALHOST/mcp", "http://localhost:80/mcp"):
+        assert portless.mcp(portless.sign_in(resource=resource)["access_token"]).status_code == 200
 
 
 def test_the_production_shape_publishes_its_https_address(make_flow):

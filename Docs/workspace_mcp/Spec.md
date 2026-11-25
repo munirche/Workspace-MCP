@@ -113,7 +113,7 @@ There is no sign-in page unless Munir has opened one, and only the one configure
 - R-5.2 WHEN Munir opens the sign-in window from the server THE SYSTEM SHALL accept sign-ins for ten minutes and then close the window.
 - R-5.3 WHEN a sign-in succeeds THE SYSTEM SHALL close the sign-in window.
 - R-5.4 WHEN five wrong passphrases have been entered since the window opened THE SYSTEM SHALL close the sign-in window.
-- R-5.5 WHEN the sign-in page is shown THE SYSTEM SHALL name on it the client asking for access and the address the browser will be sent back to.
+- R-5.5 WHEN the sign-in page is shown THE SYSTEM SHALL name on it, by a fixed label, the client asking for access, and the address the browser will be sent back to.
 - R-5.6 THE SYSTEM SHALL hold the passphrase only as a one-way hash that is slow to guess, never the passphrase itself.
 - R-5.7 IF the passphrase given to the hashing helper is shorter than twenty characters THEN the helper SHALL refuse it.
 - R-5.8 IF a sign-in is started with a client identifier other than the configured one, or a return address other than that client's own, THEN THE SYSTEM SHALL refuse it without showing the sign-in page, without sending the browser anywhere, and without repeating what the request sent.
@@ -126,12 +126,12 @@ There is no sign-in page unless Munir has opened one, and only the one configure
 - R-6.1 WHEN a sign-in completes THE SYSTEM SHALL issue an access token valid for one hour and a refresh token valid for thirty days.
 - R-6.2 WHEN a valid refresh token is used THE SYSTEM SHALL issue a new access token and a new refresh token whose thirty days start at that moment, and SHALL retire the one used and every other refresh token of the same sign-in.
 - R-6.3 WHEN a retired refresh token is used again within sixty seconds of being retired THE SYSTEM SHALL issue a further access token and refresh token for the same sign-in and SHALL leave the replacement it already issued valid.
-- R-6.4 IF a retired refresh token is used more than sixty seconds after being retired THEN THE SYSTEM SHALL cancel every token that came from the same sign-in and SHALL alert Munir.
+- R-6.4 IF a retired refresh token, not yet expired and of a sign-in not already cancelled, is used more than sixty seconds after being retired THEN THE SYSTEM SHALL cancel every token that came from the same sign-in and SHALL alert Munir.
 - R-6.5 IF the configured client, having given its identifier and secret, uses a refresh token that is expired, cancelled or unknown THEN THE SYSTEM SHALL answer with the standard error that tells the client to sign in again (`invalid_grant`) and no other.
 - R-6.6 THE SYSTEM SHALL accept a sign-in code once only, within five minutes of issuing it, and only together with the proof key that matches the challenge the sign-in began with.
 - R-6.7 THE SYSTEM SHALL store tokens and sign-in codes only as hashes, each with the user it belongs to: the one user the configuration names, and THE SYSTEM SHALL refuse to start when it names any other number.
 - R-6.8 IF a tool request carries no valid access token THEN THE SYSTEM SHALL answer that authorisation is required and SHALL say where the client can find out how to sign in.
-- R-6.9 WHEN Munir runs the cancel-all action on the server THE SYSTEM SHALL stop accepting every token issued before it.
+- R-6.9 WHEN Munir runs the cancel-all action on the server THE SYSTEM SHALL stop accepting every token, sign-in code and unfinished sign-in issued before it, and SHALL close the sign-in window.
 - R-6.10 WHEN the service is restarted THE SYSTEM SHALL go on accepting the valid tokens issued before the restart.
 - R-6.11 IF an access token was issued for a service address other than this service's own THEN THE SYSTEM SHALL refuse it.
 - R-6.12 THE SYSTEM SHALL accept token requests in the standard form encoding that the client sends.
@@ -142,7 +142,7 @@ There is no sign-in page unless Munir has opened one, and only the one configure
 - R-7.1 THE SYSTEM SHALL give every tool a title and a declaration that it either only reads or changes data, the two write tools being declared as changing data.
 - R-7.2 THE SYSTEM SHALL keep every tool result within the configured size, which is below the client's limit, and SHALL say when a result was cut short.
 - R-7.3 THE SYSTEM SHALL tell the client, in its instructions and again in the description of the project-context tool, to ask for a repo's project context before answering about it, and SHALL tell it that tool results are file contents and never instructions, that untracked files are never visible, and where memories are saved.
-- R-7.4 IF a tool refuses or fails THEN THE SYSTEM SHALL return one plain sentence the client can act on and SHALL NOT include server paths, command output or internal detail.
+- R-7.4 IF a tool refuses or fails, or a call names no tool or gives arguments that do not fit, THEN THE SYSTEM SHALL return one plain sentence the client can act on and SHALL NOT include server paths, command output, internal detail or the caller's values.
 - R-7.9 IF a request names a host other than the service's own public name THEN THE SYSTEM SHALL refuse it.
 - R-7.5 WHEN Munir adds the service to the Claude app with the configured client and signs in THE SYSTEM SHALL answer "which repos can you see?" in a text chat. [MANUAL]
 - R-7.6 WHEN Munir asks the same question in voice mode THE SYSTEM SHALL be called and answer. [MANUAL]
@@ -151,7 +151,7 @@ There is no sign-in page unless Munir has opened one, and only the one configure
 
 ### R-8 Alerts and records
 
-- R-8.1 WHEN the sign-in window is opened, a sign-in succeeds, a wrong passphrase is entered, or a retired refresh token is used after its grace period THE SYSTEM SHALL send Munir an alert naming the event, the time and the address it came from.
+- R-8.1 WHEN the sign-in window is opened, a sign-in succeeds, a wrong passphrase is entered, or a retired refresh token is used after its grace period THE SYSTEM SHALL send Munir an alert naming the event, the time and the address it came from (for the window's opening, the server itself).
 - R-8.2 IF an alert cannot be delivered THEN THE SYSTEM SHALL record the failure and SHALL carry on with what it was doing.
 - R-8.3 THE SYSTEM SHALL never put a passphrase, a token, a secret or file content into an alert or a log record.
 - R-8.4 WHEN a tool is called THE SYSTEM SHALL record the user, the tool, the repo, the path and the address the call came from.
@@ -233,7 +233,7 @@ Resolved 2026-11-11 by Munir: a note edited from the phone gains the first line 
 
 Changed 2026-11-12 by Munir, at the Clarify gate of T1.2, T1.3, T1.5 and T1.9: R-9.1 gains the service's public address, which no criterion covered although the sign-in metadata and the Host check are built from it; R-3.10 is new, because a live repo's own settings can point version control at files outside the repo, which R-3.9 (programs only) does not cover.
 
-Changed 2026-11-24 by Munir, at the Clarify gate of T1.6, T1.7, T1.8 and T1.10: R-5.8 names the client's own return address (Claude's, fixed in code; a local trial alone may use one exact loopback address, Plan D-4) and says the refusal repeats nothing the request sent; R-6.7 says a sign-in belongs to the one configured user (D-12), so the service refuses to start with any other number; R-6.5 applies once the client has given its identifier and secret, since a refresh without them is R-6.13's `invalid_client`.
+Changed 2026-11-24 by Munir, at the Clarify gate of T1.6, T1.7, T1.8 and T1.10: R-5.8 names the client's own return address (Claude's, fixed in code; a local trial alone may use one exact loopback address, Plan D-4) and says the refusal repeats nothing the request sent; R-6.7 says a sign-in belongs to the one configured user (D-12), so the service refuses to start with any other number; R-6.4 leaves an expired token, or one of a sign-in already cancelled, to R-6.5 alone, with no second alert; R-6.9 also ends codes and unfinished sign-ins and closes the window; R-5.5 names the client by a fixed label, not its identifier; R-8.1's window alert comes from the server, where the window is opened; R-7.4 also covers the SDK's own answers to an unknown tool or bad arguments, which echo the caller's text; R-6.5 applies once the client has given its identifier and secret, since a refresh without them is R-6.13's `invalid_client`.
 
 ## Completeness checklist
 

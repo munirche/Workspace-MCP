@@ -2,28 +2,27 @@
 
 ## Current State
 
-**As of 2026-11-24.** Phase 1 is under way; seven of its eleven tasks are
-built, not yet run as one service. T1.1 pinned `mcp` 2.3.0 and its
+**As of 2026-11-24.** Phase 1's ten built tasks are done; T1.11, the local
+trial, is next and is Munir's to run. T1.1 pinned `mcp` 2.3.0 and its
 dependencies by hash and tried the SDK ("The SDK, as Tried"). T1.2: the repo
 checks itself (no tracked credential, deny-only assistant settings, the lock
 pinned by hash and audited on every change and weekly). T1.3: `config.py`
-loads `config.toml` (claude-config only) and the environment's address and
-secrets, refusing any malformed entry by name, never by value. T1.9:
-`alerts.py` sends the four sign-in alerts, records failed deliveries and tool
-calls, and cuts the SDK's own log records to fixed sentences. T1.5: `git.py`,
-the one place git runs. T1.4: `paths.py` decides which repos a user may read
-and refuses any other name with the one answer a missing repo gets;
-`list_repos` gives names and whether each is writable. T1.6: `auth.py` and
-`app.py` start and finish a sign-in for the one client (D-4): Claude's
-callback fixed in code, S256 only, no registration, the service's own
-address on every token, `workspace` on every token (D-8), a code used once,
-the client's secret taken in the form or a Basic header, and another client
-or return address refused with a plain 404; tokens are held in memory until
-T1.7 moves them to SQLite. Munir approved phases 1–2 in `Tasks.md` (rev 2,
-2026-11-12); phases 3–5 are draft.
-**Next:** T1.7 (tokens), T1.8 (window, page, passphrase), T1.10 (the
-service assembled), then T1.11's local trial, built in one session from the
-plan Munir approved 2026-11-24 after both experts' review.
+loads `config.toml` and the environment, refusing any malformed entry by
+name. T1.9: `alerts.py` (the four alerts, failed deliveries and tool calls
+recorded, the SDK's records cut). T1.5: `git.py`, the one place git runs.
+T1.4: `paths.py` and `list_repos`. T1.6: `auth.py` and `app.py` start and
+finish a sign-in for the one client (D-4). T1.7: tokens hashed in SQLite
+with rotation, grace and reuse detection, and `workspace-mcp-revoke-all`.
+T1.8: `login.py`, the window from root's flag, the page, the passphrase and
+`scripts/hash_passphrase.py`. T1.10: the service assembled (`app.build`):
+its own host only, `list_repos` declared read-only with a title and
+answering one sentence, results cut to size, every refusal one plain
+sentence, logging that keeps tracebacks and caller text out, and `python -m
+workspace_mcp` on the Unix socket. Munir approved phases 1–2 in `Tasks.md`
+(rev 2, 2026-11-12); phases 3–5 are draft.
+**Next:** T1.11, the local trial (MCP Inspector over the tunnel, then the
+sandbox trial with `sudo`), then `spec-verifier` in a fresh session to close
+Phase 1; then Munir's Phase 2 steps.
 **Watch:** sessions on the box cannot `sudo`, so every deploy step is Munir's,
 from `deploy/DEPLOY.md`. Claude never sees a real secret: the local trial uses
 throwaway values. Anthropic's address ranges and the connector's sign-in rules
@@ -190,14 +189,39 @@ no-framing policy, so the sign-in page cannot be embedded in another site.
   public sign-in page to brute-force, no fail2ban jail and no lockout that
   a stranger could hold against him, and a sign-in link sent by someone
   else leads nowhere unless he opened the window himself. Cost accepted:
-  signing in needs SSH at hand, a few times a year (see tokens).
+  signing in needs SSH at hand, a few times a year (see tokens). The flag is
+  `/run/workspace-mcp-signin/open` (folder and file root-owned, outside the
+  service's own folders; a reboot clears it), holding a random nonce and the
+  opening time. The service reads it without following a link, requires
+  owner root and no group or world write, and decides the ten minutes itself:
+  from the stamp, and again from when it first saw the nonce, so stamping
+  the flag again does not extend it. Each closing is kept in the store by
+  nonce, so a restart cannot reopen it; a cancel-all since first sight closes
+  it too, and a new window ends every sign-in an older one started. A
+  passphrase post is counted only for a sign-in this window started, so a
+  stranger cannot spend the five attempts, and each attempt is reserved
+  before the check, so posts at once cannot start more than five. The page
+  names the client by a fixed label ("the Claude app") and its return
+  address, refills nothing, and is sent with `Referrer-Policy: same-origin`:
+  `no-referrer` would make the browser post `Origin: null`, which the page
+  refuses as it refuses any other site's `Origin`. The service polls the
+  flag every 2 seconds, so the window-opened alert ("from the server")
+  arrives at once (T1.8). `workspace-mcp-signin open` (T2.1) writes the flag
+  by temp file and rename, mode 0644, with a fresh random nonce, in its
+  root-owned 0755 folder, and a test pins its path to the service's.
 - *Passphrase.* Bitwarden-generated, made only for this server, stored as a
   scrypt hash (Python standard library) written
   `scrypt$<n>$<r>$<p>$<salt>$<hash>` (n, r and p in decimal; salt and
   hash in standard base64 with padding, at least 16 and 32 characters
   long), so the
   repo's credential scan can recognise one (R-9.3); `hash_passphrase.py`
-  refuses anything under 20 characters. Compared in constant time.
+  refuses anything under 20 characters. Compared in constant time. The one
+  accepted setting is N=2^17, r=8, p=1 (OWASP's floor, read 2026-11-24),
+  fixed in code: a hash with any other stops the service at start-up, by
+  name. Each check takes 128 MiB, so one runs at a time, off the request
+  loop. `scripts/hash_passphrase.py` takes no arguments, runs only in a
+  terminal, asks twice, and prints the hash: Munir runs it in his own
+  terminal, never in a session (T1.8).
 - *Tokens.* Random, stored hashed with their user id. Access 1 hour.
   Refresh 30 days, sliding: each use rotates it and starts 30 new days, so
   regular use never signs him out, and 30 idle days do. A refresh token
@@ -207,7 +231,21 @@ no-framing policy, so the sign-in page cannot be embedded in another site.
   other refresh token of the sign-in, so a copy held by a thief ends up
   retired, and its use after the 60 seconds revokes the whole chain and
   alerts. Codes single-use for 5 minutes. These lifetimes are fixed in code,
-  not configuration. The token endpoint requires the client's secret on
+  not configuration. Kept in SQLite (`/var/lib/workspace-mcp/tokens.db`,
+  mode 0600, made so before SQLite opens it) as SHA-256 hashes of 256-bit
+  random values, each rotation one locked transaction, nothing cached in
+  memory, so a restart changes nothing. Cancel-all is
+  `workspace-mcp-revoke-all` (sudo, the system Python, no arguments): it
+  raises the number in root-owned `/etc/workspace-mcp/generation` (to the
+  current Unix time at least, so a lost file never restarts the count) and
+  deletes the sign-in flag. The service reads that number on every check and
+  accepts a token, code or unfinished sign-in only under the number it was
+  issued with; an unreadable number, or one lower than the highest it has
+  seen (a restored file), refuses everything until the command runs again.
+  The service user can read the number but never write it, and root never
+  opens the service's own folder; `/etc/workspace-mcp` stays root-owned 0755
+  (a T2.2 check). Every alert is written to the journal before it is sent,
+  on one worker thread, so a stuck Telegram never holds up an answer (T1.7). The token endpoint requires the client's secret on
   every exchange (the client id alone is not secret: it passes through the
   browser), and an access token is accepted only if it was issued for this
   service's own address. Refused refresh tokens get exactly `invalid_grant`.
@@ -847,7 +885,13 @@ socket with Host `mcp.rsboom.com`. Seen, and the task that proves it again:
    returned that way, or the SDK hides their sentence. A tool returning a
    list is split into one text block per item, and an empty list sends no
    text at all (read in the source), so T1.10 phrases `list_repos`' answer
-   itself, an empty one included.
+   itself, an empty one included. T1.10 chose: every tool returns
+   `CallToolResult`, text only (no output schema, so nothing is sent twice),
+   cut to the configured size with a note; a module's refusal is its own
+   sentence and any other exception one fixed sentence, logged by class
+   alone; a server middleware rewrites the SDK's unknown-tool and
+   bad-argument answers to one sentence naming the tool only when it is
+   name-shaped, never the value, in both protocol revisions.
 8. *Host and Origin.* Transport security with `mcp.rsboom.com` as the only
    allowed host guards `/mcp` alone (421 to another Host); `/.well-known/*`,
    `/token` and `/authorize` answer the same whatever the Host. It also runs
@@ -857,7 +901,12 @@ socket with Host `mcp.rsboom.com`. Seen, and the task that proves it again:
    header (403, the value logged), `https://claude.ai` included; one without
    passes. Claude calls from Anthropic's servers, so an `Origin` is unlikely
    but unseen; whether to allow `https://claude.ai` is decided in T1.10 with
-   `security-expert`, and T1.11 sees what Inspector sends.
+   `security-expert`, and T1.11 sees what Inspector sends. T1.10: the
+   service's own check is outermost, before the token check, on every route:
+   exactly one `Host` equal to the configured one, else 421; `X-Forwarded-Host`
+   is never read, and a websocket is closed. No `Origin` is allowed in
+   production (Claude calls server to server, so an `Origin` means a
+   browser); revisit if Phase 2 shows Claude sends one.
 9. *Unix socket.* Listening on it is uvicorn's (`uds=`); `MCPServer.run()`
    takes only a host and a port. uvicorn makes the socket mode 666, so the
    folder's mode is the guard (D-6's 0750 runtime folder); the unit's
@@ -879,7 +928,18 @@ socket with Host `mcp.rsboom.com`. Seen, and the task that proves it again:
     `MCPServer` (whose constructor calls `logging.basicConfig`) and passes
     each of them, or keeps `mcp` from propagating to any other. `uvicorn.error`
     tracebacks and `uvicorn.access` (which logs `/authorize`'s query) are
-    outside the filter, and nothing logs at DEBUG (R-8.3).
+    outside the filter, and nothing logs at DEBUG (R-8.3). T1.10:
+    `python -m workspace_mcp` sets up its one handler, filtered, at INFO,
+    before building the app; an outermost layer turns any exception into a
+    plain 500 recorded by its class alone, so no traceback reaches uvicorn;
+    uvicorn runs with `proxy_headers=False`, `access_log=False`,
+    `log_config=None`, `lifespan="on"` and one worker. The handler also
+    drops any other logger's traceback and exception text, keeping the
+    class (uvicorn's lifespan failure, asyncio's lost task), and a start-up
+    refusal is logged by its fixed text or by class alone. `python -m
+    workspace_mcp` reads `config.toml` beside its own `Code/` folder, so T2.1
+    must put the release's `Code/` on the path by a root-written means, never
+    the working folder, and check it under the unit.
 
 From Claude's documentation (`mcp-expert`, 2026-11-11): the client sends the
 client secret when the dialog's field is filled, needs S256 advertised, takes
@@ -1142,11 +1202,19 @@ characters per result, and GitHub's free plan, which has no branch protection.
   `/token` CORS preflight refuses before the service's own layer runs, so the
   trial build allows that header (trial only), or Inspector runs through its
   proxy.
-- **The caller's address on a socket** (for T1.10). Over a Unix socket
-  uvicorn has no client address and ignores nginx's `X-Forwarded-For` unless
-  told to trust every sender, which leans on the socket folder's mode. T1.10
-  decides, with `security-expert`; the records take the address as given and
-  say "unknown" when there is none.
+- **A second tap on "Sign in"** (Munir to decide). Two right passphrases for
+  one sign-in give one sign-in: the first post closes the window and issues
+  the code; the second answers 404. A browser that submits twice shows the
+  second answer, so the 303 to Claude is lost and the window must be opened
+  again. Failing closed was kept; the alternative is to answer a second right
+  post for the same sign-in, within a few seconds, with a fresh single-use
+  code, which means the page answers briefly after its window closed. Until
+  decided: tap once (DEPLOY.md, T1.11).
+- **The caller's address on a socket** (settled in T1.7 and T1.10). uvicorn's
+  proxy headers are off; the service takes nginx's `X-Forwarded-For` only when
+  there is exactly one, holding one address, else "unknown", and uses it for
+  alerts and records alone, never for a decision. T2.2 proves nginx replaces a
+  forged header.
 - **Git's security release of 2026-11-10** (fixes for merges and clones).
   Confirm the box's git before Phase 3 clones the vault.
 
