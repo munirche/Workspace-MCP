@@ -97,7 +97,7 @@ Notes go only into the folders configuration allows in a synced repo, are publis
 - R-4.5 IF the content of a write is larger than the configured size THEN THE SYSTEM SHALL refuse it.
 - R-4.6 WHEN THE SYSTEM writes a note, whether it creates it or edits one it did not create, it SHALL make sure the note begins with a line naming the user who ordered it, the application the order came from, the date, and that it has not been reviewed.
 - R-4.7 WHEN a write is accepted THE SYSTEM SHALL record it as one change containing that file only, under an author identity used for nothing else, with a message naming the note and the user.
-- R-4.8 WHEN a write is recorded THE SYSTEM SHALL publish it to the remote copy's main line at once and SHALL NOT replace or discard anything already published there.
+- R-4.8 WHEN a write is recorded THE SYSTEM SHALL publish it to the remote copy's main line at once and SHALL NOT replace or discard anything already published there. [NEEDS CLARIFICATION: publish at once, or only when Munir says so; see "Needs clarification", to be decided before Phase 4 is approved]
 - R-4.9 IF publishing fails THEN THE SYSTEM SHALL keep the recorded note, answer that it was saved but not published, and try again at the next read or write of that repo.
 - R-4.10 WHEN a write begins while earlier notes are still unpublished THE SYSTEM SHALL keep those notes and publish them together with the new one.
 - R-4.11 IF an unpublished note cannot be combined with the remote copy because the same file was changed elsewhere THEN THE SYSTEM SHALL save that note's content under a new name beside the original, report the conflict, and go on publishing the other notes.
@@ -207,7 +207,27 @@ this server, so no health-data safeguard applies.
 
 ## Needs clarification
 
-None open.
+Open, to be decided before Phase 4 is approved (raised by Munir 2026-11-24):
+
+- **When a vault note is published (R-4.8, Plan D-9).** Today each note
+  written from the phone is recorded and published to the vault's main line at
+  once. The alternative: the service records the note in its own copy and
+  publishes only when Munir says so.
+  - *At once (today):* a memory is on every device within seconds, and
+    nothing waits on the server; "saved, not published" happens only when a
+    push fails.
+  - *On Munir's word:* he sees what goes out before it does. But a note
+    reaches his other devices only once published, and a handoff note reaches
+    the next coding session only then, since the update command pulls from
+    the remote copy. Unpublished notes collect on the server until someone
+    remembers. Phone Claude still finds them, since it reads the service's
+    copy.
+  - *To settle with it:* where the "publish" order comes from (a tool on
+    the phone, or a command on the server); whether an unpublished note can
+    be dropped, which R-4.14 forbids today; and whether vault notes and
+    handoff notes follow the same rule.
+  - *Changes if adopted:* R-4.8, R-4.9, R-4.10 and R-4.13, likely a new
+    criterion for publishing; D-9; Phase 4's "done when" line and T4.3/T4.4.
 
 Resolved 2026-11-11 by Munir: a note edited from the phone gains the first line even if the service did not create it, and the line names who ordered it and from which application, so other applications can be added later (R-4.6). `inbox/` and `handoff/<repo>.md` stand for now; they are configuration and can change as the vault is tuned. The alert bot is a new Telegram bot named `MRC_MCP_Bot` (`MRC_MCP_1_Bot` if the handle is taken), used for nothing else, writing to Munir's private chat with it (R-8.5, R-10.9); the handle BotFather actually grants is recorded in `Plan.md` when the bot is created in Phase 2.
 
