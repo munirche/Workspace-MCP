@@ -2,24 +2,28 @@
 
 ## Current State
 
-**As of 2026-11-16.** Phase 1 is under way; six of its eleven tasks are
-built, none wired together yet. T1.1 pinned `mcp` 2.3.0 and its dependencies
-by hash and tried the SDK ("The SDK, as Tried"). T1.2: the repo checks
-itself (no tracked credential, deny-only assistant settings, the lock pinned
-by hash and audited on every change and weekly). T1.3: `config.py` loads
-`config.toml` (claude-config only) and the environment's address and
+**As of 2026-11-24.** Phase 1 is under way; seven of its eleven tasks are
+built, not yet run as one service. T1.1 pinned `mcp` 2.3.0 and its
+dependencies by hash and tried the SDK ("The SDK, as Tried"). T1.2: the repo
+checks itself (no tracked credential, deny-only assistant settings, the lock
+pinned by hash and audited on every change and weekly). T1.3: `config.py`
+loads `config.toml` (claude-config only) and the environment's address and
 secrets, refusing any malformed entry by name, never by value. T1.9:
-`alerts.py` sends the four sign-in alerts, records failed deliveries and
-tool calls, and cuts the SDK's own log records to fixed sentences. T1.5:
-`git.py`, the one place git runs: caller text is data, one time limit kills
-the whole process group, every program a repo's settings could name is
-switched off on each call, and a repo whose settings reach outside it is
-refused. T1.4: `paths.py` decides which repos a user may read, from the
-user's own lists alone, and refuses any other name with the one answer a
-missing repo gets; `list_repos` gives names and whether each is writable.
-Munir approved phases 1–2 in `Tasks.md` (rev 2, 2026-11-12); phases 3–5
-are draft.
-**Next:** T1.6 to T1.8, then T1.10, each with `/build mcp security task <id>`.
+`alerts.py` sends the four sign-in alerts, records failed deliveries and tool
+calls, and cuts the SDK's own log records to fixed sentences. T1.5: `git.py`,
+the one place git runs. T1.4: `paths.py` decides which repos a user may read
+and refuses any other name with the one answer a missing repo gets;
+`list_repos` gives names and whether each is writable. T1.6: `auth.py` and
+`app.py` start and finish a sign-in for the one client (D-4): Claude's
+callback fixed in code, S256 only, no registration, the service's own
+address on every token, `workspace` on every token (D-8), a code used once,
+the client's secret taken in the form or a Basic header, and another client
+or return address refused with a plain 404; tokens are held in memory until
+T1.7 moves them to SQLite. Munir approved phases 1–2 in `Tasks.md` (rev 2,
+2026-11-12); phases 3–5 are draft.
+**Next:** T1.7 (tokens), T1.8 (window, page, passphrase), T1.10 (the
+service assembled), then T1.11's local trial, built in one session from the
+plan Munir approved 2026-11-24 after both experts' review.
 **Watch:** sessions on the box cannot `sudo`, so every deploy step is Munir's,
 from `deploy/DEPLOY.md`. Claude never sees a real secret: the local trial uses
 throwaway values. Anthropic's address ranges and the connector's sign-in rules
@@ -169,6 +173,15 @@ no-framing policy, so the sign-in page cannot be embedded in another site.
   Munir into the connector dialog's "Use your own OAuth client". No
   `/register` endpoint exists. The dialog's auth settings cannot be edited
   after the connector is added; changing them means removing and adding it.
+  Its return address is Claude's callback, fixed in code; only a local trial
+  (the service on http loopback) may build it with one exact
+  `http://localhost:<port>/<path>` address instead, which `python -m
+  workspace_mcp` cannot set. The token endpoint takes the secret in the form
+  or in a Basic header, since the SDK reads only the form and a client may
+  send the header alone. The client is one record (id, secret, return
+  address, label), so a second client later is a list of them. Sign-in serves
+  the one user in `config.toml` (D-12); the service refuses to start with any
+  other number (T1.6, 2026-11-24).
 - *Sign-in page.* `/authorize` and `/login` answer 404 unless the sign-in
   window is open. Munir opens it over SSH (Termius on the phone):
   `sudo workspace-mcp-signin open`, a root-owned script that stamps a flag
@@ -317,7 +330,9 @@ may read and write is decided by `config.toml` (D-12), not by scopes.
 Claude asks for every scope a server advertises, so separate `read` and
 `write` scopes would add code without adding a choice. A later tool family
 of a different kind (sending) arrives with its own scope, so connecting
-again is an explicit consent.
+again is an explicit consent. The scope is `workspace`, on every token;
+`offline_access` is listed beside it in the server's metadata, because Claude
+asks for a refresh token only when it is listed (T1.6).
 
 ### D-9: Writes go through the server's own clone and are pushed to the default branch at once (2026-10-30, revised 2026-11-10)
 
@@ -782,14 +797,16 @@ socket with Host `mcp.rsboom.com`. Seen, and the task that proves it again:
 1. *Resource metadata* is at `/.well-known/oauth-protected-resource/mcp` (the
    path-suffixed form; the bare path answers 404), with `resource` exactly
    `https://mcp.rsboom.com/mcp` and `authorization_servers`
-   `["https://mcp.rsboom.com"]`. No `scopes_supported` while no scope is
-   required. nginx's `\.well-known/` location covers it. T1.6.
+   `["https://mcp.rsboom.com"]`. Its `scopes_supported` comes from the
+   required scopes: `["workspace"]` since T1.6. nginx's `\.well-known/`
+   location covers it.
 2. *Authorization-server metadata* has the issuer without a trailing slash,
    S256 as the only challenge method, and no registration or revocation
    endpoint while both options are off. It advertises `client_secret_post`
    and `client_secret_basic` although a client record accepts only the one
-   method it names (`mcp-expert`, from the source), and no
-   `scopes_supported`. T1.6 settles the method and the one scope (D-8).
+   method it names (`mcp-expert`, from the source). T1.6 takes both methods
+   (a Basic header is moved into the form before the SDK reads it) and lists
+   `["workspace", "offline_access"]` as `scopes_supported` (D-8).
 3. *`/register`* answers 404 to GET and POST. T1.6 (R-5.9).
 4. *`/mcp`* answers 401 with `WWW-Authenticate: Bearer error="invalid_token",
    error_description="Authentication required",
@@ -883,6 +900,7 @@ Workspace-MCP/
   Code/workspace_mcp/
     __main__.py               the SDK's app (stateless, JSON), instructions, uvicorn on the Unix socket
     config.py                 load and validate config.toml
+    app.py                    assembles the service: the SDK's app and the layers in front of it
     paths.py                  the one place that decides whether a user may read or write a path
     git.py                    the one place that runs git: argument lists, `--`, timeouts
     repo_tools.py             the seven read tools
@@ -1119,10 +1137,11 @@ characters per result, and GitHub's free plan, which has no branch protection.
   more than remote ones was not checked; D-6 denies them either way.
 - **Claude Code as a client.** Not needed (it runs on this box with direct
   access); loopback redirects stay disallowed.
-- **Inspector's return address** (for T1.6). The fixed client allows only
-  Claude's callback, so T1.11's sign-in through Inspector fails unless the
-  local run's return address can differ. T1.6 decides how, with
-  `security-expert`.
+- **Inspector's sign-in** (for T1.11). Its return address is settled in D-4.
+  Inspector in a browser sends the secret in a Basic header, which the SDK's
+  `/token` CORS preflight refuses before the service's own layer runs, so the
+  trial build allows that header (trial only), or Inspector runs through its
+  proxy.
 - **The caller's address on a socket** (for T1.10). Over a Unix socket
   uvicorn has no client address and ignores nginx's `X-Forwarded-For` unless
   told to trust every sender, which leans on the socket folder's mode. T1.10
