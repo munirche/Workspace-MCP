@@ -1200,8 +1200,13 @@ characters per result, and GitHub's free plan, which has no branch protection.
 - **Inspector's sign-in** (for T1.11). Its return address is settled in D-4.
   Inspector in a browser sends the secret in a Basic header, which the SDK's
   `/token` CORS preflight refuses before the service's own layer runs, so the
-  trial build allows that header (trial only), or Inspector runs through its
-  proxy.
+  trial build (`scripts/local_trial.py --origin`) can allow Inspector's one
+  origin on `/mcp` and `/token`, preflight included; a public build refuses
+  that setting, and without it every `Origin` is refused. Inspector v2 (what
+  `npx` now starts) sends its sign-in requests from Node with no `Origin`, like
+  Claude, so the trial runs its command line first and v1's browser UI as the
+  fallback (`mcp-expert`, 2026-11-25). What Inspector actually sent, with its
+  version, is recorded here after the trial (`deploy/DEPLOY.md`, A10).
 - **A second tap on "Sign in"** (Munir to decide). Two right passphrases for
   one sign-in give one sign-in: the first post closes the window and issues
   the code; the second answers 404. A browser that submits twice shows the

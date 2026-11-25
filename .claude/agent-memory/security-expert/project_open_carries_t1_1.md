@@ -186,6 +186,18 @@ Offered, check whether taken:
 - **T2.1:** the config path is found relative to the module file, so it is the release's own only when the package is imported from the release's `Code/` folder; installed into the venv it points nowhere and the service refuses to start. T2.1 pins how the package gets on the path (not the working folder) and checks it under the unit.
 - **T1.11:** read the trial's journal for one sign-in and one forced failure; no offline test sees uvicorn's own records.
 
+From the T1.11 preparation Review (2026-11-25, uncommitted on `t1.11-trial`; read `scripts/local_trial.py`, `deploy/sandbox_trial.py`, `deploy/DEPLOY.md` and `test_trial.py` before raising again, the fixes offered were Munir's to take or decline). The T1.10 advice on tracebacks from other loggers landed (`NoTracebacks`).
+
+What is guaranteed: the trial's CORS layer exists only when a trial origin is set, sits inside the host check, names one exact loopback origin on `/mcp` and `/token`, and sends no credentials header; any trial setting is refused off loopback; the trial script builds its own environment, keeps every secret in memory, and its folder holds only hashes; the sandbox script refuses root, never reads the key itself, and its output carries no secret; the `systemd-run` line carries every sandbox option of the planned unit.
+
+Offered, check whether taken (and read the recorded results in Plan.md with these in mind):
+
+- **Socket check fails as written:** a raw bind under `UMask=0077` makes the socket owner-only, and connecting needs write on it; uvicorn sets 0666. Without a chmod in the trial, nginx's group is refused and the result misreads as a sandbox fault.
+- **Loopback and public-address checks pass on any error:** nothing listening looks the same as blocked. Advised: count only a permission error, add the trial's own loopback listener as a control, and an outside check that the two ports answer. The errno I expect from a blocked connect is from memory, not seen.
+- **Not exercised:** git reading the bound repo as another user (only a folder listing was checked); which Unix sockets the unit's `www-data` group can reach, which the address rules do not cover and R-10.3 does not mention. T2.2 decides (a socket unit owning the listener would let the service keep its own group).
+- **Runbook:** the fingerprint line lacked sudo under root's 0700 folder, so the comparison could be skipped; cleanup left the unit's state folder under `/var/lib/private`; paste after stopping the trial, not before; pin the Inspector version (two 2025 advisories on the official package, the remote-execution one fixed in 0.14.1; searched 2026-11-25).
+- **Accepted as is:** the dev venv from Munir's checkout runs inside the throwaway unit beside the throwaway key (not root, scratch repo only).
+
 Currency (searched 2026-11-24): no advisory found against the server side of mcp 2.3.0; GHSA-qx49-fqc8-xw99 (2026-09-28) is client-side discovery, fixed in 2.2.0. OWASP's scrypt floor read the same day: N=2^17, r=8, p=1.
 
 Related: [[supply-chain-decisions]]
