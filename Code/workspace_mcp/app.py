@@ -36,18 +36,18 @@ class Service:
     server: MCPServer
 
 
-def build(config, *, store, clock=time.time, trial=None):
+def build(config, *, store, alerts, clock=time.time, trial=None):
     if len(config.users) != 1:
         raise ConfigError(f"sign-in serves one user; the configuration names {len(config.users)}")
     (user,) = config.users
-    if trial is not None:
-        _check_trial(config, trial)
+    if trial is not None or store.generation_path != auth.GENERATION_PATH:
+        _check_trial(config, trial or Trial())
     if trial is not None and trial.return_address is not None:
         return_address, label = trial.return_address, auth.TRIAL_LABEL
     else:
         return_address, label = auth.CLAUDE_CALLBACK, auth.LABEL
     client = auth.Client(config.secrets.client_id.reveal(), config.secrets.client_secret, return_address, label)
-    provider = auth.Provider(client, user, config.public, store, clock)
+    provider = auth.Provider(client, user, config.public, store, alerts, clock)
     server = MCPServer(
         "Workspace-MCP",
         auth_server_provider=provider,
@@ -68,7 +68,9 @@ def build(config, *, store, clock=time.time, trial=None):
             allowed_origins=[],
         ),
     )
-    return Service(app=TokenForm(AuthorizeGuard(inner, client), client), provider=provider, server=server)
+    return Service(
+        app=CallerAddress(TokenForm(AuthorizeGuard(inner, client), client)), provider=provider, server=server
+    )
 
 
 def _check_trial(config, trial):
@@ -77,6 +79,24 @@ def _check_trial(config, trial):
         raise ConfigError("trial settings are refused unless the service runs on the local machine")
     if trial.return_address is not None and not TRIAL_RETURN.fullmatch(trial.return_address):
         raise ConfigError("the trial return address must be one exact http://localhost:<port>/<path> address")
+
+
+class CallerAddress:
+    """Takes the caller's address from nginx's one X-Forwarded-For value, for alerts and records only."""
+
+    def __init__(self, app):
+        self._app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self._app(scope, receive, send)
+        values = [value for name, value in scope["headers"] if name == b"x-forwarded-for"]
+        address = values[0].decode("latin-1").strip() if len(values) == 1 and b"," not in values[0] else None
+        token = auth.CALLER.set(address)
+        try:
+            await self._app(scope, receive, send)
+        finally:
+            auth.CALLER.reset(token)
 
 
 def _not_found():

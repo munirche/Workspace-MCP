@@ -2,14 +2,16 @@
 
 import base64
 import hashlib
+import logging
 import secrets
 import time
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from starlette.testclient import TestClient
 
-from workspace_mcp import app, auth, config
+from workspace_mcp import alerts, app, auth, config
 
 CONFIG = """
 [repos.claude-config]
@@ -61,14 +63,24 @@ def query(url):
 class Flow:
     """One built service and the steps of a sign-in against it."""
 
-    def __init__(self, public_url=LOCAL, text=CONFIG, trial=None, secret=None):
-        self.environ = environ(public_url)
+    def __init__(self, public_url=LOCAL, text=CONFIG, trial=None, secret=None, state=None, generation=None,
+                 environ_values=None, clock=None, sender=None):
+        self.environ = dict(environ_values) if environ_values else environ(public_url)
         if secret is not None:
             self.environ["WORKSPACE_MCP_CLIENT_SECRET"] = secret
         self.config = config.load(text, self.environ)
-        self.clock = Clock()
-        self.store = auth.MemoryStore()
-        self.service = app.build(self.config, store=self.store, clock=self.clock, trial=trial)
+        self.clock = clock or Clock()
+        self.state = Path(state)
+        if generation is None:
+            # A public service may only read the root-owned file; a local one may use its own.
+            generation = self.state / "generation" if public_url == LOCAL else Path(auth.GENERATION_PATH)
+            if public_url == LOCAL and not generation.exists():
+                generation.write_text("0\n")
+        self.generation = Path(generation)
+        self.store = auth.SqliteStore(self.state / "tokens.db", str(self.generation))
+        self.sent = []
+        self.alerts = alerts.Queue(alerts.Alerts(sender or self.sent.append, logging.getLogger("test.alerts")))
+        self.service = app.build(self.config, store=self.store, alerts=self.alerts, clock=self.clock, trial=trial)
         self.client_id = self.environ["WORKSPACE_MCP_CLIENT_ID"]
         self.secret = self.environ["WORKSPACE_MCP_CLIENT_SECRET"]
         self.return_address = trial.return_address if trial else auth.CLAUDE_CALLBACK
@@ -124,6 +136,10 @@ class Flow:
         form.update(fields)
         return self.http.post("/token", data={k: v for k, v in form.items() if v is not None})
 
+    def rebuilt(self):
+        """The same service started again on the same state, as after a restart."""
+        return Flow(environ_values=self.environ, state=self.state, generation=self.generation, clock=self.clock)
+
     def mcp(self, token=None, headers=None):
         sent = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
         if token is not None:
@@ -143,17 +159,18 @@ class Flow:
 
 
 @pytest.fixture
-def flow():
-    built = Flow()
+def flow(tmp_path):
+    built = Flow(state=tmp_path)
     with built.http:
         yield built
 
 
 @pytest.fixture
-def make_flow():
+def make_flow(tmp_path_factory):
     opened = []
 
     def make(**kwargs):
+        kwargs.setdefault("state", tmp_path_factory.mktemp("state"))
         built = Flow(**kwargs)
         built.http.__enter__()
         opened.append(built)
