@@ -2,28 +2,27 @@
 
 ## Current State
 
-**As of 2026-11-24.** Phase 1 is under way; nine of its eleven tasks are
-built, not yet run as one service. T1.1 pinned `mcp` 2.3.0 and its
+**As of 2026-11-24.** Phase 1's ten built tasks are done; T1.11, the local
+trial, is next and is Munir's to run. T1.1 pinned `mcp` 2.3.0 and its
 dependencies by hash and tried the SDK ("The SDK, as Tried"). T1.2: the repo
 checks itself (no tracked credential, deny-only assistant settings, the lock
 pinned by hash and audited on every change and weekly). T1.3: `config.py`
-loads `config.toml` (claude-config only) and the environment's address and
-secrets, refusing any malformed entry by name, never by value. T1.9:
-`alerts.py` sends the four sign-in alerts, records failed deliveries and tool
-calls, and cuts the SDK's own log records to fixed sentences. T1.5: `git.py`,
-the one place git runs. T1.4: `paths.py` decides which repos a user may read
-and refuses any other name with the one answer a missing repo gets;
-`list_repos` gives names and whether each is writable. T1.6: `auth.py` and
-`app.py` start and finish a sign-in for the one client (D-4). T1.7: tokens
-kept hashed in SQLite with rotation, the 60-second grace and reuse
-detection, and `workspace-mcp-revoke-all` (D-4). T1.8: `login.py`, the
-sign-in window read from root's flag, the page, the passphrase check and
-`scripts/hash_passphrase.py` (D-4). Munir approved phases 1–2 in `Tasks.md`
+loads `config.toml` and the environment, refusing any malformed entry by
+name. T1.9: `alerts.py` (the four alerts, failed deliveries and tool calls
+recorded, the SDK's records cut). T1.5: `git.py`, the one place git runs.
+T1.4: `paths.py` and `list_repos`. T1.6: `auth.py` and `app.py` start and
+finish a sign-in for the one client (D-4). T1.7: tokens hashed in SQLite
+with rotation, grace and reuse detection, and `workspace-mcp-revoke-all`.
+T1.8: `login.py`, the window from root's flag, the page, the passphrase and
+`scripts/hash_passphrase.py`. T1.10: the service assembled (`app.build`):
+its own host only, `list_repos` declared read-only with a title and
+answering one sentence, results cut to size, every refusal one plain
+sentence, logging that keeps tracebacks and caller text out, and `python -m
+workspace_mcp` on the Unix socket. Munir approved phases 1–2 in `Tasks.md`
 (rev 2, 2026-11-12); phases 3–5 are draft.
-**Next:** T1.10 (the service assembled: host check, tool declarations,
-result size, plain refusals, logging, `python -m workspace_mcp`), then
-T1.11's local trial, built in one session from the plan Munir approved
-2026-11-24 after both experts' review.
+**Next:** T1.11, the local trial (MCP Inspector over the tunnel, then the
+sandbox trial with `sudo`), then `spec-verifier` in a fresh session to close
+Phase 1; then Munir's Phase 2 steps.
 **Watch:** sessions on the box cannot `sudo`, so every deploy step is Munir's,
 from `deploy/DEPLOY.md`. Claude never sees a real secret: the local trial uses
 throwaway values. Anthropic's address ranges and the connector's sign-in rules
@@ -886,7 +885,13 @@ socket with Host `mcp.rsboom.com`. Seen, and the task that proves it again:
    returned that way, or the SDK hides their sentence. A tool returning a
    list is split into one text block per item, and an empty list sends no
    text at all (read in the source), so T1.10 phrases `list_repos`' answer
-   itself, an empty one included.
+   itself, an empty one included. T1.10 chose: every tool returns
+   `CallToolResult`, text only (no output schema, so nothing is sent twice),
+   cut to the configured size with a note; a module's refusal is its own
+   sentence and any other exception one fixed sentence, logged by class
+   alone; a server middleware rewrites the SDK's unknown-tool and
+   bad-argument answers to one sentence naming the tool only when it is
+   name-shaped, never the value, in both protocol revisions.
 8. *Host and Origin.* Transport security with `mcp.rsboom.com` as the only
    allowed host guards `/mcp` alone (421 to another Host); `/.well-known/*`,
    `/token` and `/authorize` answer the same whatever the Host. It also runs
@@ -896,7 +901,12 @@ socket with Host `mcp.rsboom.com`. Seen, and the task that proves it again:
    header (403, the value logged), `https://claude.ai` included; one without
    passes. Claude calls from Anthropic's servers, so an `Origin` is unlikely
    but unseen; whether to allow `https://claude.ai` is decided in T1.10 with
-   `security-expert`, and T1.11 sees what Inspector sends.
+   `security-expert`, and T1.11 sees what Inspector sends. T1.10: the
+   service's own check is outermost, before the token check, on every route:
+   exactly one `Host` equal to the configured one, else 421; `X-Forwarded-Host`
+   is never read, and a websocket is closed. No `Origin` is allowed in
+   production (Claude calls server to server, so an `Origin` means a
+   browser); revisit if Phase 2 shows Claude sends one.
 9. *Unix socket.* Listening on it is uvicorn's (`uds=`); `MCPServer.run()`
    takes only a host and a port. uvicorn makes the socket mode 666, so the
    folder's mode is the guard (D-6's 0750 runtime folder); the unit's
@@ -918,7 +928,18 @@ socket with Host `mcp.rsboom.com`. Seen, and the task that proves it again:
     `MCPServer` (whose constructor calls `logging.basicConfig`) and passes
     each of them, or keeps `mcp` from propagating to any other. `uvicorn.error`
     tracebacks and `uvicorn.access` (which logs `/authorize`'s query) are
-    outside the filter, and nothing logs at DEBUG (R-8.3).
+    outside the filter, and nothing logs at DEBUG (R-8.3). T1.10:
+    `python -m workspace_mcp` sets up its one handler, filtered, at INFO,
+    before building the app; an outermost layer turns any exception into a
+    plain 500 recorded by its class alone, so no traceback reaches uvicorn;
+    uvicorn runs with `proxy_headers=False`, `access_log=False`,
+    `log_config=None`, `lifespan="on"` and one worker. The handler also
+    drops any other logger's traceback and exception text, keeping the
+    class (uvicorn's lifespan failure, asyncio's lost task), and a start-up
+    refusal is logged by its fixed text or by class alone. `python -m
+    workspace_mcp` reads `config.toml` beside its own `Code/` folder, so T2.1
+    must put the release's `Code/` on the path by a root-written means, never
+    the working folder, and check it under the unit.
 
 From Claude's documentation (`mcp-expert`, 2026-11-11): the client sends the
 client secret when the dialog's field is filled, needs S256 advertised, takes
@@ -1189,11 +1210,11 @@ characters per result, and GitHub's free plan, which has no branch protection.
   post for the same sign-in, within a few seconds, with a fresh single-use
   code, which means the page answers briefly after its window closed. Until
   decided: tap once (DEPLOY.md, T1.11).
-- **The caller's address on a socket** (for T1.10). Over a Unix socket
-  uvicorn has no client address and ignores nginx's `X-Forwarded-For` unless
-  told to trust every sender, which leans on the socket folder's mode. T1.10
-  decides, with `security-expert`; the records take the address as given and
-  say "unknown" when there is none.
+- **The caller's address on a socket** (settled in T1.7 and T1.10). uvicorn's
+  proxy headers are off; the service takes nginx's `X-Forwarded-For` only when
+  there is exactly one, holding one address, else "unknown", and uses it for
+  alerts and records alone, never for a decision. T2.2 proves nginx replaces a
+  forged header.
 - **Git's security release of 2026-11-10** (fixes for merges and clones).
   Confirm the box's git before Phase 3 clones the vault.
 

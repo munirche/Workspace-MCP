@@ -185,6 +185,42 @@ class Flow:
         return Flow(environ_values=self.environ, state=self.state, generation=self.generation, clock=self.clock,
                     trial=trial)
 
+    def rpc(self, method, params=None, token=None, version="2025-11-25", headers=None):
+        """One JSON-RPC request to /mcp, in the given protocol revision."""
+        from mcp_types._v2026_07_28 import ClientCapabilities, Implementation, RequestMetaObject
+
+        body = {"jsonrpc": "2.0", "id": 1, "method": method}
+        if version == "2026-07-28":
+            meta = RequestMetaObject.model_validate({
+                "io.modelcontextprotocol/clientCapabilities": ClientCapabilities().model_dump(by_alias=True),
+                "io.modelcontextprotocol/clientInfo": Implementation(name="test", version="1").model_dump(),
+                "io.modelcontextprotocol/protocolVersion": version,
+            })
+            params = dict(params or {}, _meta=meta.model_dump(by_alias=True, exclude_none=True, mode="json"))
+        if params is not None:
+            body["params"] = params
+        sent = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
+        if method != "initialize":
+            sent["mcp-protocol-version"] = version
+        if version == "2026-07-28":
+            from mcp.shared.inbound import encode_header_value
+
+            # This revision routes by headers that must match the body.
+            sent["mcp-method"] = method
+            if method == "tools/call":
+                sent["mcp-name"] = encode_header_value(params["name"])
+        if token is not None:
+            sent["authorization"] = f"Bearer {token}"
+        sent.update(headers or {})
+        return self.http.post("/mcp", json=body, headers=sent)
+
+    def call(self, tool, arguments=None, token=None, version="2025-11-25", headers=None):
+        """A tools/call, returning the result object."""
+        params = {"name": tool, "arguments": arguments or {}}
+        response = self.rpc("tools/call", params, token=token, version=version, headers=headers)
+        assert response.status_code == 200, response.text
+        return response.json()["result"]
+
     def mcp(self, token=None, headers=None):
         sent = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
         if token is not None:
@@ -201,6 +237,14 @@ class Flow:
             },
         }
         return self.http.post("/mcp", json=body, headers=sent)
+
+
+@pytest.fixture
+def quiet_sdk():
+    """The SDK logger's filter as the service installs it, removed afterwards."""
+    quiet = alerts.quiet_sdk_logs()
+    yield quiet
+    logging.getLogger(alerts.SDK_LOGGER).removeFilter(quiet)
 
 
 @pytest.fixture(autouse=True)
