@@ -7,7 +7,8 @@ handoff notes for the next Claude Code session. One user, Munir.
 
 ## Current Status
 
-Phase 1, the skeleton run locally, is being built task by task.
+Phase 1, the skeleton run locally, is done and verified (2026-11-27);
+Phase 2, the deploy, begins with Munir's own steps.
 **Where things stand:** the *Current State* block at the top of
 `Docs/workspace_mcp/Plan.md` says what is built, what comes next and what to
 watch; each task rewrites it when it closes, so read it before anything else.

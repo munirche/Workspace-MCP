@@ -2,8 +2,14 @@
 
 ## Current State
 
-**As of 2026-11-24.** Phase 1's ten built tasks are done; T1.11, the local
-trial, is next and is Munir's to run. T1.1 pinned `mcp` 2.3.0 and its
+**As of 2026-11-27.** Phase 1 is done and verified: `spec-verifier`, in a
+fresh session, found its 44 criteria proven (`Tasks.md`, Phase 1's record).
+T1.11, the trial, on 2026-11-27: Inspector 2.16.0 on `ovh-vps`, through a tunnel opened from the
+box, signed in and called `list_repos` against a local run, and the log
+showed both alerts (what it sent: Open Questions, "Inspector's sign-in"); the
+throwaway unit proved each sandbox option D-6 relies on ("systemd unit",
+"Seen 2026-11-27"), the address block by dropping rather than refusing.
+T1.1 pinned `mcp` 2.3.0 and its
 dependencies by hash and tried the SDK ("The SDK, as Tried"). T1.2: the repo
 checks itself (no tracked credential, deny-only assistant settings, the lock
 pinned by hash and audited on every change and weekly). T1.3: `config.py`
@@ -19,10 +25,12 @@ its own host only, `list_repos` declared read-only with a title and
 answering one sentence, results cut to size, every refusal one plain
 sentence, logging that keeps tracebacks and caller text out, and `python -m
 workspace_mcp` on the Unix socket. Munir approved phases 1–2 in `Tasks.md`
-(rev 2, 2026-11-12); phases 3–5 are draft.
-**Next:** T1.11, the local trial (MCP Inspector over the tunnel, then the
-sandbox trial with `sudo`), then `spec-verifier` in a fresh session to close
-Phase 1; then Munir's Phase 2 steps.
+(2026-11-27, adding the `ovh-vps` route to T1.11); phases 3–5 are draft.
+**Next:** Phase 2, which begins with Munir's own steps (the alert bot, the
+secrets in Bitwarden, the DNS record), then T2.1. Before T2.2: sshd's Unix
+socket `/run/ssh-unix-local/socket` is reachable from the unit, which R-10.3
+("cannot connect to any service listening on this server") does not allow,
+and R-6.10's text is narrower than its tests; both are Munir's to decide.
 **Watch:** sessions on the box cannot `sudo`, so every deploy step is Munir's,
 from `deploy/DEPLOY.md`. Claude never sees a real secret: the local trial uses
 throwaway values. Anthropic's address ranges and the connector's sign-in rules
@@ -31,8 +39,8 @@ change; recheck the references at each deploy. The SDK checks the Host only on
 message, so T1.10 adds its own checks; and a token with no `resource` is
 refused, so T1.6 puts the service's own address on it when Claude sends none.
 Unverified until built: what Claude's
-client sends (secret method, `resource`, protocol revision, `Origin`), the
-sandbox options on this box, voice with a custom connector, and whether the
+client sends (secret method, `resource`, protocol revision, `Origin`),
+voice with a custom connector, and whether the
 app can be told to always allow a write. For Phase 3: search results must
 pass the path module before any text is returned, since a work-tree folder
 swapped for a link sends `git grep` elsewhere (T3.4); status needs an
@@ -772,11 +780,39 @@ where one fails:
   `ProtectHome=tmpfs`, the form the manual documents for binding under
   `/home`);
 - nginx reaches the socket and nobody else can;
-- `IPAddressDeny=` refuses 18789 and 2222 on loopback and on the box's public
-  IPv4 and IPv6 addresses, and leaves DNS, GitHub and Telegram working (this
-  is reasoned from systemd's documentation, not yet seen);
+- `IPAddressDeny=` blocks 18789 and 2222 on loopback and on the box's public
+  IPv4 and IPv6 addresses, and leaves DNS, GitHub and Telegram working;
 - the installed Python runs under `MemoryDenyWriteExecute`;
 - `git` and `ssh` work for the push inside the sandbox.
+
+Seen 2026-11-27 (T1.11, `DEPLOY.md` B7–B8: `deploy/sandbox_trial.py` run by
+`deploy/sandbox_trial_unit.sh` with these options, systemd 259):
+
+- **The binds: work.** Only `claude-config` is under `/repos`, a tracked file
+  reads, git reads it as another user; `/home/munir` is refused and no other
+  user's process is visible.
+- **The socket: works.** Folder 0750 with group `www-data`, socket 0666:
+  `www-data` connected, `munir` was refused.
+- **`IPAddressDeny=`: works, by dropping, not refusing.** Every connection to
+  loopback (the unit's own listener included) and to the public addresses on
+  18789 and 2222 hung until the caller's own timeout (5 s); from outside the
+  sandbox each answered at once, connected or refused. So a blocked call costs
+  its timeout rather than failing at once (the trial script counted only an
+  immediate refusal and printed CHANGED for all nine; the options stand). DNS,
+  GitHub's SSH port and Telegram's API were reached. `systemd-run -p` takes
+  `localhost` and `link-local` only one per assignment; the unit file's one
+  line parses as written (`systemd-analyze verify`).
+- **Python: works.** The system Python, scrypt at N=2^17 (peak 136 MB of
+  `MemoryMax=512M`) and the service's venv run under `MemoryDenyWriteExecute`.
+- **git and ssh: work.** The scratch repo cloned and took a pushed branch, with
+  the key from `LoadCredential=`. `/etc` is read-only, the state folder
+  writable.
+- **For T2.2, with `security-expert`:** the unit can connect to the Unix
+  sockets under `/run` open to everyone, among them sshd's
+  `/run/ssh-unix-local/socket`, so sshd is not out of reach as the address
+  list intends (it still needs `munir`'s key). Proposed:
+  `InaccessiblePaths=/run/ssh-unix-local`, and a look at the rest of the list
+  (D-Bus, systemd's own sockets).
 
 The env file `/etc/workspace-mcp.env` (root, mode 600; the name matches the
 deny rules on `/etc/*.env`, I-17) holds the public address and the secrets,
@@ -1032,8 +1068,10 @@ PR.
    `scripts/hash_passphrase.py` yourself. Claude never sees the passphrase or
    its hash.
 5. Local run on a Unix socket in a folder only `munir` can enter. MCP
-   Inspector on the laptop through `ssh -L 8765:<socket> openclaw-vps`: the
-   OAuth flow end to end, with a throwaway passphrase and client secret made
+   Inspector on another machine, either the laptop through
+   `ssh -L 8765:<socket> openclaw-vps` or the other VPS `ovh-vps` through
+   `ssh -R 127.0.0.1:18765:<socket> ovh-vps` opened from the box (so `ovh-vps`
+   gets no way in), with `curl` there for the browser: the OAuth flow end to end, with a throwaway passphrase and client secret made
    for the trial and the alert sender replaced by one that writes to the log.
    The real passphrase, client secret and bot token never enter a session's
    environment (constitution rule 8); the first real alert is Phase 2's.
@@ -1205,8 +1243,19 @@ characters per result, and GitHub's free plan, which has no branch protection.
   that setting, and without it every `Origin` is refused. Inspector v2 (what
   `npx` now starts) sends its sign-in requests from Node with no `Origin`, like
   Claude, so the trial runs its command line first and v1's browser UI as the
-  fallback (`mcp-expert`, 2026-11-25). What Inspector actually sent, with its
-  version, is recorded here after the trial (`deploy/DEPLOY.md`, A10).
+  fallback (`mcp-expert`, 2026-11-25). Seen 2026-11-27 with Inspector 2.16.0's
+  command line on `ovh-vps` (`DEPLOY.md`, V1–V7): it read both metadata
+  documents, asked for `workspace offline_access` with S256, `prompt=consent`
+  and `resource` (the service's own `/mcp` address) at `/authorize`, sent
+  `resource` again at `/token`, and sent the secret in a Basic header. No
+  `Origin` on `/mcp` (the SDK refuses any there, and the calls passed). Its
+  default era (legacy, through `initialize`) signed in and called `list_repos`;
+  `--protocol-era modern` listed the tools on the stored token, in two
+  requests to the legacy era's four; the revision numbers were not printed. No
+  refresh was needed in the run. Without a terminal it signs in only with
+  `MCP_AUTO_OPEN_ENABLED=true`, which prints the address to open; with no
+  keychain it keeps the secret and tokens unencrypted in
+  `~/.mcp-inspector/secrets.json` (0600), deleted after the run.
 - **A second tap on "Sign in"** (Munir to decide). Two right passphrases for
   one sign-in give one sign-in: the first post closes the window and issues
   the code; the second answers 404. A browser that submits twice shows the

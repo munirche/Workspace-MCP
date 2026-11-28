@@ -1,6 +1,6 @@
 # Tasks: Workspace MCP
 
-Status: tasks approved by Munir 2026-11-12 rev 2 (phases 1–2); phases 3–5 draft
+Status: tasks approved by Munir 2026-11-27 rev 2 (phases 1–2); phases 3–5 draft
 
 <!-- Only Munir edits the status line. Format:
      Status: tasks approved by Munir <YYYY-MM-DD> (phases 1–2); phases 3–5 draft
@@ -34,14 +34,14 @@ recorded in `Plan.md`.
 - [x] T1.8 The sign-in window, the page and the passphrase — criteria: R-5.1, R-5.2, R-5.3, R-5.4, R-5.5, R-5.6, R-5.7 — tests: `tests/workspace_mcp/test_login.py`
 - [x] T1.9 Alerts and records — criteria: R-8.1, R-8.2, R-8.3, R-8.4 — tests: `tests/workspace_mcp/test_alerts.py` [P]
 - [x] T1.10 Assembling the service: tool titles and declarations, result size, plain refusals, and refusing any host name but its own — criteria: R-7.1, R-7.2, R-7.4, R-7.9 — tests: `tests/workspace_mcp/test_app.py`
-- [ ] T1.11 The local trial — criteria: none (manual checklist below)
+- [x] T1.11 The local trial — criteria: none (manual checklist below)
 
 Manual checklist:
-- [ ] Local run on a private socket with a throwaway passphrase and client secret; MCP Inspector on the laptop through an SSH tunnel completes sign-in and calls the one tool
-- [ ] The log shows the alerts the fake sender was asked to send: window opened, sign-in succeeded
-- [ ] The sandbox trial: a throwaway unit with the planned options, started with `sudo` by Munir but running as a throwaway user of its own, never as root; its script is copied to a root-owned path and read there before it runs. Each line of Plan's list (binds, socket, no connection to loopback or to the box's public addresses on 18789 and 2222, DNS and outside hosts still reachable, Python, git and ssh) is recorded in `Plan.md` as works or as changed, with the reason. Its push test uses a throwaway key on a scratch repo
+- [x] Local run on a private socket with a throwaway passphrase and client secret; MCP Inspector on another machine (the laptop, or Munir's other VPS `ovh-vps`) through an SSH tunnel completes sign-in and calls the one tool
+- [x] The log shows the alerts the fake sender was asked to send: window opened, sign-in succeeded
+- [x] The sandbox trial: a throwaway unit with the planned options, started with `sudo` by Munir but running as a throwaway user of its own, never as root; its script is copied to a root-owned path and read there before it runs. Each line of Plan's list (binds, socket, no connection to loopback or to the box's public addresses on 18789 and 2222, DNS and outside hosts still reachable, Python, git and ssh) is recorded in `Plan.md` as works or as changed, with the reason. Its push test uses a throwaway key on a scratch repo
 
-Verification record: _(pasted from spec-verifier at phase end)_
+Verification record (spec-verifier, fresh session, 2026-11-27): All 44 in-scope Phase 1 criteria (R-1.1 to R-1.4, R-3.3, R-3.4, R-3.9, R-3.10, R-5.1 to R-5.10, R-6.1 to R-6.13, R-7.1, R-7.2, R-7.4, R-7.9, R-8.1 to R-8.4, R-9.1 to R-9.5) are proven by passing tests in tests/workspace_mcp/. R-10.7 (T1.1) is manual and evidenced in Plan.md "The SDK, as Tried". No weak, unproven or orphan claims. `.venv/bin/pytest`: 723 passed, 1 failed, 0 skipped. The one failure is tests/test_architecture.py::test_a_finished_phase_records_its_verification, which fails only because this record was pending. T1.11's manual lines are ticked and their results are recorded in Plan.md (Current State and the sandbox section). Two notes, neither blocking. R-6.10's text is narrower than its tests (store file mode and link refusal). R-7.1's write-tool half has no tool to test until a later phase. Still for Munir: confirm CI is green on GitHub, and carry the sshd Unix-socket finding into T2.2. Verdict: Phase 1 done once this record replaces the pending line.
 
 ## Phase 2: The skeleton, deployed and connected
 
