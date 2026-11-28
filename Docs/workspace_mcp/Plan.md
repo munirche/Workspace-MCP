@@ -2,8 +2,9 @@
 
 ## Current State
 
-**As of 2026-11-27.** Phase 1's eleven tasks are done. T1.11, the trial, on
-2026-11-27: Inspector 2.16.0 on `ovh-vps`, through a tunnel opened from the
+**As of 2026-11-27.** Phase 1 is done and verified: `spec-verifier`, in a
+fresh session, found its 44 criteria proven (`Tasks.md`, Phase 1's record).
+T1.11, the trial, on 2026-11-27: Inspector 2.16.0 on `ovh-vps`, through a tunnel opened from the
 box, signed in and called `list_repos` against a local run, and the log
 showed both alerts (what it sent: Open Questions, "Inspector's sign-in"); the
 throwaway unit proved each sandbox option D-6 relies on ("systemd unit",
@@ -25,9 +26,11 @@ answering one sentence, results cut to size, every refusal one plain
 sentence, logging that keeps tracebacks and caller text out, and `python -m
 workspace_mcp` on the Unix socket. Munir approved phases 1–2 in `Tasks.md`
 (2026-11-27, adding the `ovh-vps` route to T1.11); phases 3–5 are draft.
-**Next:** `spec-verifier` in a fresh session to close Phase 1; then Munir's
-Phase 2 steps. T2.2 carries one sandbox finding: sshd's Unix socket
-`/run/ssh-unix-local/socket` is reachable from the unit.
+**Next:** Phase 2, which begins with Munir's own steps (the alert bot, the
+secrets in Bitwarden, the DNS record), then T2.1. Before T2.2: sshd's Unix
+socket `/run/ssh-unix-local/socket` is reachable from the unit, which R-10.3
+("cannot connect to any service listening on this server") does not allow,
+and R-6.10's text is narrower than its tests; both are Munir's to decide.
 **Watch:** sessions on the box cannot `sudo`, so every deploy step is Munir's,
 from `deploy/DEPLOY.md`. Claude never sees a real secret: the local trial uses
 throwaway values. Anthropic's address ranges and the connector's sign-in rules

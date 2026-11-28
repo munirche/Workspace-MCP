@@ -1,6 +1,6 @@
 # Spec: Workspace MCP
 
-Status: in force for phases 1–2, approved with `Tasks.md` by Munir 2026-11-12; later phases draft
+Status: in force for phases 1–2, approved with `Tasks.md` by Munir 2026-11-12 and again 2026-11-27; Phase 1 verified 2026-11-27; later phases draft
 Created: 2026-11-11
 Plan: `Docs/workspace_mcp/Plan.md` · Tasks: `Docs/workspace_mcp/Tasks.md`
 
@@ -243,3 +243,8 @@ Changed 2026-11-24 by Munir, at the Clarify gate of T1.6, T1.7, T1.8 and T1.10: 
 - [x] Manual-only criteria are marked [MANUAL]
 - [x] No [NEEDS CLARIFICATION] remains for the phases about to be approved
 - [x] Domain expert has reviewed the sections in its domain (`mcp-expert` and `security-expert`, 2026-11-11; findings folded in)
+
+Checked at Phase 1's close, 2026-11-27: each line still holds for phases 1–2.
+`spec-verifier` found Phase 1's 44 criteria proven, with no orphan or unproven
+claim; R-6.10's text says less than its tests (the store readable by the
+service alone, a link refused), put to Munir.
