@@ -16,6 +16,34 @@ rehearsal, so it comes first. Inspector v1's browser UI is the fallback. Type
 `localhost` exactly wherever it appears: `127.0.0.1` is another host to the
 service (refused, 421) and another origin to the sign-in.
 
+Two routes, with the same checks (A9, A10): from the other VPS, run by a
+session, or from the laptop, run by Munir.
+
+**From the other VPS (`ovh-vps`).** The box opens the tunnel outward (`-R`),
+so `ovh-vps` gets no way into the box, and a process there can reach the trial
+only for its minutes. `curl` stands in for the browser; the browser's own part
+(`Origin`, the page's headers) is covered by the tests and seen on the iPhone
+in Phase 2.
+
+```
+[claude] V1. On the box, A1. On ovh-vps: Node meets Inspector's engines (2.16.0 wants ^22.23.4, ^24.22.1
+             or >=26.12.1), curl is there, 127.0.0.1:6276 and :18765 are free, ~/.mcp-inspector is absent.
+[claude] V2. On the box: .venv/bin/python scripts/local_trial.py --port 18765 --callback http://127.0.0.1:6276/oauth/callback
+[claude] V3. On the box: ssh -N -o ExitOnForwardFailure=yes -R 127.0.0.1:18765:<socket> ovh-vps
+[claude] V4. On ovh-vps (the variable lets it sign in without a terminal; it prints the address to open):
+             MCP_AUTO_OPEN_ENABLED=true npx -y @modelcontextprotocol/inspector@2.16.0 --cli --server-url http://localhost:18765/mcp
+             --transport http --client-id=<id> --client-secret=<secret>
+             --callback-url http://127.0.0.1:6276/oauth/callback --oauth-debug --method tools/call --tool-name list_repos
+[claude] V5. On ovh-vps, with the authorization URL V4 prints: curl it through to /login, then post the passphrase
+             once with its request id; the 303 lands on Inspector's listener, which finishes and calls list_repos.
+[claude] V6. On ovh-vps: V4's command with --stored-auth-only --protocol-era modern --method tools/list
+             (the window allows one sign-in).
+[claude] V7. Stop Inspector, the tunnel and the trial, in that order; then A9 and A10. On ovh-vps:
+             rm -rf ~/.mcp-inspector (dead tokens); npx's copy of Inspector stays in ~/.npm/_npx.
+```
+
+**From the laptop.**
+
 ```
 [claude] A1. On the branch under trial: `git status` is clean and `.venv/bin/pytest -q` passes.
 [munir]  A2. On the laptop, first (the download can outlast the sign-in window):
@@ -29,7 +57,9 @@ service (refused, 421) and another origin to the sign-in.
              It prints the socket, the tunnel command, a client id and secret, and a passphrase.
              Leave it running; the sign-in window it opens lasts ten minutes from now.
 [munir]  A4. On the laptop, the printed tunnel: ssh -N -L 8765:<socket> openclaw-vps
-             The laptop's port must be 8765, the address the trial was built with.
+             The laptop's port must be 8765, the address the trial was built with. On Windows, a port
+             another program holds shows as "Permission denied" or "already in use": start A3 again with
+             --port <a free one> and use it throughout; for 6276, change A3's --callback and A5's --callback-url.
 [munir]  A5. On the laptop, Inspector's command line (options as --help named them in A2) with server URL
              http://localhost:8765/mcp, the printed client id and secret, and the callback URL from A3,
              listing the tools and then calling list_repos.
@@ -74,38 +104,18 @@ relies on. Its push test uses a throwaway key on a scratch repo.
              sudo ssh-keygen -lf /root/workspace-mcp-trial/known_hosts
              Compare the fingerprint with GitHub's page "GitHub's SSH key fingerprints"; stop if different.
 [munir]  B5. sudo install -d -m 755 -o root -g root /usr/local/lib/workspace-mcp-trial
-             sudo install -m 755 -o root -g root deploy/sandbox_trial.py /usr/local/lib/workspace-mcp-trial/
-             sudo less /usr/local/lib/workspace-mcp-trial/sandbox_trial.py      (read the copy root will run)
+             sudo install -m 755 -o root -g root deploy/sandbox_trial.py deploy/sandbox_trial_unit.sh /usr/local/lib/workspace-mcp-trial/
+             sudo less /usr/local/lib/workspace-mcp-trial/sandbox_trial.py /usr/local/lib/workspace-mcp-trial/sandbox_trial_unit.sh
+             (read the copies root will run; :n moves to the second file)
 [claude] B6. ip -4 addr show scope global; ip -6 addr show scope global
              The box's public IPv4 and IPv6 addresses (not secrets), for B7.
              ss -ltn '( sport = :18789 or sport = :2222 )'
              Both ports listen, so a "blocked" in B7 is the sandbox's doing, not an empty port.
-[munir]  B7. Run, as one command, with <ipv6> from B6. It binds this checkout read-only at /srv/trial, so
+[munir]  B7. Run, with <ipv6> from B6 (the unit's options are in sandbox_trial_unit.sh, read in B5; a long
+             pasted command broke at its line ends). It binds this checkout read-only at /srv/trial, so
              the unit also runs the development venv beside the throwaway key: acceptable, since it runs as
              a throwaway user and the key reaches the scratch repo only.
-             sudo systemd-run --unit=workspace-mcp-trial --wait --pipe --collect \
-               -p DynamicUser=yes -p Group=www-data \
-               -p StateDirectory=workspace-mcp-trial -p StateDirectoryMode=0700 \
-               -p RuntimeDirectory=workspace-mcp-trial -p RuntimeDirectoryMode=0750 -p UMask=0077 \
-               -p Environment=HOME=/var/lib/workspace-mcp-trial \
-               -p ProtectSystem=strict -p ProtectHome=yes -p TemporaryFileSystem=/repos:ro \
-               -p BindReadOnlyPaths=/home/munir/GitRepos/claude-config:/repos/claude-config \
-               -p BindReadOnlyPaths=/home/munir/GitRepos/Workspace-MCP:/srv/trial \
-               -p ProtectProc=invisible -p ProcSubset=pid \
-               -p "IPAddressDeny=localhost link-local 15.204.210.85 <ipv6>" \
-               -p "IPAddressAllow=127.0.0.53 127.0.0.54" \
-               -p MemoryMax=512M -p TasksMax=64 -p CPUQuota=100% -p NoNewPrivileges=yes \
-               -p PrivateTmp=yes -p PrivateDevices=yes -p ProtectKernelTunables=yes \
-               -p ProtectKernelModules=yes -p ProtectKernelLogs=yes -p ProtectControlGroups=yes \
-               -p ProtectClock=yes -p ProtectHostname=yes -p RestrictNamespaces=yes \
-               -p RestrictRealtime=yes -p RestrictSUIDSGID=yes -p LockPersonality=yes \
-               -p MemoryDenyWriteExecute=yes -p SystemCallArchitectures=native \
-               -p SystemCallFilter=@system-service -p CapabilityBoundingSet= \
-               -p "RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX" \
-               -p LoadCredential=key:/root/workspace-mcp-trial/key \
-               -p LoadCredential=known_hosts:/root/workspace-mcp-trial/known_hosts \
-               /usr/bin/python3 -I /usr/local/lib/workspace-mcp-trial/sandbox_trial.py \
-               git@github.com:munirche/workspace-mcp-scratch.git 15.204.210.85 <ipv6>
+             sudo /usr/local/lib/workspace-mcp-trial/sandbox_trial_unit.sh git@github.com:munirche/workspace-mcp-scratch.git 15.204.210.85 <ipv6>
 [munir]  B8. When it prints "listening ... for 120 s", in a second session:
              sudo -u www-data python3 -c "import socket; s = socket.socket(socket.AF_UNIX); s.connect('/run/workspace-mcp-trial/mcp.sock'); print('reached')"
              python3 -c "import socket; s = socket.socket(socket.AF_UNIX); s.connect('/run/workspace-mcp-trial/mcp.sock')"

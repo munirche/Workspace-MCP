@@ -96,6 +96,9 @@ The sign-in window is open for ten minutes from now; start again for another.
 """, flush=True)
         uvicorn.Server(uvicorn.Config(prepared.service.app, uds=prepared.socket, proxy_headers=False,
                                       access_log=False, log_config=None, lifespan="on", workers=1)).run()
+    except KeyboardInterrupt:
+        # uvicorn re-raises Ctrl-C after its clean shutdown; it is how the trial ends.
+        pass
     finally:
         prepared.close()
     return 0

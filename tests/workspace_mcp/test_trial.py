@@ -2,6 +2,7 @@
 
 import importlib.machinery
 import importlib.util
+import logging
 import os
 import stat
 from pathlib import Path
@@ -90,3 +91,24 @@ def test_the_trial_script_makes_fresh_throwaway_values_and_reads_none_from_the_s
         for prepared in (first, second):
             prepared.close()
     assert not Path(first.folder).exists()
+
+
+def test_ctrl_c_ends_the_trial_quietly_and_removes_its_folder(monkeypatch, capsys):
+    """Covers: R-8.3"""
+    trial = _script()
+    made = []
+    prepare = trial.prepare
+    monkeypatch.setattr(trial, "prepare", lambda *args: made.append(prepare(*args)) or made[-1])
+
+    def interrupted(self):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(trial.uvicorn.Server, "run", interrupted)
+    root = logging.getLogger()
+    saved = list(root.handlers)
+    try:
+        assert trial.main(["local_trial.py"]) == 0
+    finally:
+        root.handlers[:] = saved
+    assert "Traceback" not in capsys.readouterr().err
+    assert not Path(made[0].folder).exists()
